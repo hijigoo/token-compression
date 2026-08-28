@@ -384,6 +384,18 @@ def nb_01() -> dict:
 압축이라고 하면 보통 "덜 중요한 걸 버린다" 를 떠올립니다. 이 랩은 반대입니다.
 **아무것도 안 버리고** 토큰만 줄입니다.
 
+한 줄로 보여드리면 이렇습니다.
+
+```
+압축 전   [{"id":"A-1","amount":1200},{"id":"A-2","amount":3400}]
+압축 후   #TSV │ id  │ amount
+          "A-1" │ 1200
+          "A-2" │ 3400
+```
+
+`id` 와 `amount` 라는 글자가 레코드마다 반복되던 것을 헤더 한 줄로 올렸습니다.
+값은 하나도 안 바뀌었으니 **되돌리면 원본과 똑같습니다.**
+
 가능한 이유는 텍스트에 **내용이 아닌데도 토큰을 먹는 부분**이 있기 때문입니다.
 
 | 무엇이 중복인가 | 어디에 |
@@ -393,67 +405,186 @@ def nb_01() -> dict:
 | 사람이 보라고 넣은 **들여쓰기** | JSON, XML |
 | 세로줄을 맞추려고 채운 **정렬 공백** | 마크다운 표, 설정 파일 |
 
-산문에는 그런 중복이 없습니다. 그래서 같은 코드가 구조화 텍스트에서는
+산문에는 이런 중복이 없습니다. 그래서 같은 코드가 구조화 텍스트에서는
 28% 줄이고 산문에서는 1% 줄입니다. **입력이 결과를 정합니다.**
+
+### 이 노트북에서 하실 것
+
+| 절 | 무엇을 |
+|---|---|
+| 2 | 변환 7종이 실제로 무엇을 바꾸는지 전후로 봅니다 |
+| 3 | "아무것도 안 잃었다" 를 어떻게 확인하는지 봅니다 |
+| 4 | 그 확인이 **진짜로 잡는지** 일부러 고장 내서 봅니다 |
+| 5~7 | 설정 3개를 전부 돌려 비교합니다 |
 '''),
         md("## 1. kit 과 변환 모듈 불러오기"),
         code(BOOTSTRAP + '''
+import json
+
 import transforms as X
 from compress import compress, verify_steps
 
+counter = T.make_counter({}, "gpt-5.4")
+
+
+def eye(text, width=44):
+    """눈에 안 보이는 글자를 보이게 바꿉니다.
+
+    줄바꿈은 ⏎, 표 구분자(\\\\x1f)는 ▏, 연달아 나오는 공백은 · 로 표시합니다.
+    안 그러면 표 안에서 줄과 공백이 뭉개져서, 정작 무엇이 바뀌었는지
+    알아볼 수가 없습니다. 특히 공백을 지우는 변환은 전후가 똑같아 보입니다.
+    """
+    import re
+    t = text.replace("\\x1f", " ▏ ").replace("\\n", " ⏎ ")
+    t = re.sub(r" {2,}", lambda m: "·" * min(len(m.group()), 10), t)
+    return t if len(t) <= width else t[:width - 1] + "…"
+
+
+print("kit 준비 완료 · 변환", len(X.REGISTRY), "종")'''),
+
+        md('''
+## 2. 변환 7종이 실제로 무엇을 하는지 한 번에 보기
+
+설명보다 **결과를 보시는 편이 빠릅니다.** 각 변환에 딱 맞는 짧은 입력을
+하나씩 주고, 전후를 나란히 놓았습니다.
+
+`⏎` 는 줄바꿈, `▏` 는 표 구분자입니다. 원래 눈에 안 보이는 글자라서
+표시해 두었습니다.
+'''),
+        code('''
+DEMO = {
+    "json_to_table":    '[{"id":"A-1","amt":1200},{"id":"A-2","amt":3400}]',
+    "json_compact":     '{\\n  "host": "db-01",\\n  "port": 5432\\n}',
+    "log_dedup":        ("2026-03-03T14:20:11 INFO  handler=refund ok\\n"
+                         "2026-03-03T14:20:11 INFO  handler=cancel ok\\n"
+                         "2026-03-03T14:20:11 ERROR handler=refund fail"),
+    "xml_compact":      '<cfg>\\n    <db host="a" port="1"/>\\n</cfg>',
+    "md_table_compact": ("| 요금제  | 가격  |\\n|--------|------|\\n"
+                         "| Free   | 0    |\\n| Pro    | 49000|"),
+    "kv_compact":       "host    :   db-01\\nport    :   5432\\nretry   :   3",
+    "ws_collapse":      "a      b       c       d",
+}
+
+rows = []
+for name, src in DEMO.items():
+    out, meta = compress(src, pipeline=[name])
+    ok, why, checked = verify_steps(meta["_steps"])
+    rows.append([
+        name,
+        eye(src),
+        eye(out),
+        f"{len(src)} → {len(out)}",
+        f"-{1 - len(out) / len(src):.0%}",
+        "검증됨" if checked else "검증 불가",
+    ])
+
 table(
-    ["변환", "하는 일", "검증 방법"],
-    [[n, t.note,
-      "되돌리기" if t.restore else ("정규형 비교" if t.canon else "없음 (손실)")]
-     for n, t in X.REGISTRY.items()],
-    align=["left", "left", "left"],
-    title="등록된 변환",
-    note="검증 방법이 없는 변환은 손실로 분류합니다. 무손실은 증명할 수 있어야 합니다.",
+    ["변환", "압축 전", "압축 후", "글자", "절감", "확인"],
+    rows,
+    align=["left", "left", "left", "right", "right", "left"],
+    title="변환 7종 · 같은 입력을 주면 이렇게 바뀝니다",
+    note="맨 아래 ws_collapse 만 '검증 불가' 입니다. 이유는 다음 절에서 설명드립니다.",
 )'''),
 
         md('''
-## 2. 무손실을 말이 아니라 코드로 정의하기
+## 3. "아무것도 안 잃었다" 를 어떻게 확인하나요
 
-"줄었다" 는 쉽게 보입니다. 어려운 건 **"아무것도 안 잃었다" 를 증명**하는
-것입니다. 그래서 모든 변환은 자기를 검증하는 방법을 함께 들고 옵니다.
-
-| 방법 | 어떻게 | 쓰는 변환 |
-|---|---|---|
-| `restore` | 되돌려서 원본과 **글자 단위**로 비교 | `log_dedup` |
-| `canon` | 양쪽을 정규형으로 바꿔 비교 | `json_*`, `xml_*`, `md_table_*`, `kv_*` |
-| (없음) | 검증 불가 → **손실로 분류** | `ws_collapse` |
-
-정규형 비교가 필요한 이유는, 들여쓰기를 지우면 **되돌릴 수는 없지만 잃은
-정보는 없기** 때문입니다. JSON 의 공백은 내용이 아니므로 파싱한 객체가
-같으면 같습니다.
+줄었다는 건 글자 수만 세면 바로 보입니다. 어려운 건 **아무것도 안 잃었다**
+쪽입니다. 위 표의 `json_to_table` 하나를 붙잡고 실제로 확인해 보겠습니다.
 '''),
         code('''
-import json
-
 before = json.dumps([{"id": "A-1", "amount": 1200, "status": "paid"},
                      {"id": "A-2", "amount": 3400, "status": "refunded"}],
                     ensure_ascii=False, indent=2)
-
 after, meta = compress(before, pipeline=["json_to_table"])
-ok, why, checked = verify_steps(meta["_steps"])
 
-print("── 압축 전 ──"); print(before)
-print("\\n── 압축 후 ── (\\\\x1f 는 눈에 안 보이는 구분자입니다)")
-print(after.replace("\\x1f", " | "))
-print(f"\\n검증: {ok} · {why}")
-print(f"키 이름이 레코드마다 반복되던 것이 헤더 한 줄로 갔습니다.")'''),
+print("━━━ 압축 전 ━━━")
+print(before)
+print(f"\\n{len(before)}자 · {counter(before)} 토큰\\n")
+
+print("━━━ 압축 후 ━━━")
+print(after.replace("\\x1f", " ▏ "))
+print(f"\\n{len(after)}자 · {counter(after)} 토큰")
+print(f"\\n키 이름 id·amount·status 가 레코드마다 반복되던 것이 헤더 한 줄로 갔습니다.")'''),
 
         md('''
-## 3. 검사가 진짜 잡는지 확인하기
+줄어든 건 확인했습니다. 그럼 **잃은 건 없을까요?**
 
-**일부러 고장 낸 입력으로 확인하지 않은 검사는 믿지 마세요.**
-"동작하는 것처럼 보이지만 아무것도 안 하는" 검사는 없느니만 못합니다.
+압축 결과를 다시 펴서 원본과 맞춰봅니다. 두 개가 같으면 잃은 게 없다는 뜻입니다.
+'''),
+        code('''
+restored = X.json_to_table_restore(after)      # 압축본을 다시 폅니다
+original = json.loads(before)                  # 원본을 파싱합니다
 
-값을 몰래 지우는 변환을 심어서, 검증이 이걸 잡아내는지 봅니다.
+print("원본을 파싱  :", original)
+print("압축본을 되폄:", restored)
+print()
+print("두 값이 같은가:", restored == original, "← 같으면 잃은 것이 없습니다")
+
+ok, why, checked = verify_steps(meta["_steps"])
+print(f"\\n랩이 매 케이스마다 하는 검사: {ok} · {why}")'''),
+
+        md('''
+### 확인하는 방법이 두 가지인 이유
+
+방금 본 것은 **다시 펴서 맞춰보기**였습니다. 그런데 이 방법이 안 통하는
+변환도 있습니다.
+
+```
+json_compact:   {                      →   {"host":"db-01","port":5432}
+                  "host": "db-01",
+                  "port": 5432
+                }
+
+되돌려 보면?    {"host": "db-01", "port": 5432}
+                ↑ 들여쓰기가 몇 칸이었는지 복원할 수 없습니다
+```
+
+**글자 단위로는 원본과 다릅니다.** 그렇다고 정보를 잃은 걸까요? 아닙니다.
+JSON 에서 들여쓰기는 내용이 아니기 때문입니다. 그래서 이럴 때는 **양쪽을
+파싱해서 객체끼리** 맞춰봅니다.
+
+| 확인 방법 | 무엇과 무엇을 비교하나요 | 쓰는 변환 |
+|---|---|---|
+| **되돌리기** | 되돌린 글자 ↔ 원본 글자 | `log_dedup` |
+| **정규형** | 파싱한 값 ↔ 파싱한 값 | `json_*`, `xml_*`, `md_table_*`, `kv_*` |
+| (없음) | 비교할 방법이 없습니다 | `ws_collapse` |
+
+`ws_collapse`(공백 접기)만 두 방법 다 안 됩니다. `a      b` 를 `a b` 로
+바꾸면 원래 공백이 몇 칸이었는지도, 무엇과 비교해야 할지도 알 수 없습니다.
+그래서 이 랩은 **`ws_collapse` 를 무손실이 아니라 손실로 분류**하고,
+쓴 횟수를 결과에 남깁니다.
+'''),
+        code('''
+rows = []
+for name in ["log_dedup", "json_compact", "ws_collapse"]:
+    t = X.REGISTRY[name]
+    how = "되돌리기" if t.restore else ("정규형 비교" if t.canon else "없음")
+    src = DEMO[name]
+    out, meta = compress(src, pipeline=[name])
+    ok, why, checked = verify_steps(meta["_steps"])
+    rows.append([name, how, "예" if checked else "아니요", why])
+
+table(
+    ["변환", "확인 방법", "검증했나요", "결과"],
+    rows,
+    align=["left", "left", "center", "left"],
+    title="세 가지 경우를 나란히",
+    note="검증 못 한 변환을 쓰면 그 실행 결과는 '무손실' 이라고 부를 수 없습니다.",
+)'''),
+
+        md('''
+## 4. 검사가 진짜 잡는지 확인하기
+
+앞 절에서 "검증했습니다" 라는 결과를 봤습니다. 그런데 그 검사가 정말로
+일하고 있는 걸까요, 아니면 그냥 항상 통과만 하는 걸까요?
+
+**일부러 고장 낸 입력을 넣어봐야 알 수 있습니다.** 값을 몰래 지우는 변환을
+심어서 검사가 걸러내는지 봅니다.
 '''),
         code('''
 def sneaky(text):
-    """status 필드를 몰래 버리는 변환. 무손실인 척합니다."""
+    """status 필드를 몰래 버리면서 무손실인 척하는 변환입니다."""
     o = json.loads(text)
     for r in o:
         r.pop("status", None)
@@ -462,14 +593,28 @@ def sneaky(text):
 
 X.REGISTRY["sneaky"] = X.Transform("sneaky", sneaky, canon=X.json_canon)
 
-_, bad = compress(before, pipeline=["sneaky"])
-print("정상 변환:", verify_steps(compress(before, pipeline=["json_to_table"])[1]["_steps"]))
-print("몰래 삭제:", verify_steps(bad["_steps"]))
+rows = []
+for name, label in [("json_to_table", "정상 변환"), ("sneaky", "몰래 삭제")]:
+    out, meta = compress(before, pipeline=[name])
+    ok, why, _ = verify_steps(meta["_steps"])
+    rows.append([label, eye(out, 40), "통과" if ok else "걸림", why])
 
-del X.REGISTRY["sneaky"]
-print("\\n검사가 잡았습니다. 잡지 못했다면 이 랩의 '무손실' 은 빈말이 됩니다.")'''),
+table(
+    ["무엇을 넣었나", "결과물", "검사", "판정"],
+    rows,
+    align=["left", "left", "center", "left"],
+    title="정상 변환 vs 값을 몰래 버리는 변환",
+    note="아래쪽이 '걸림' 으로 나와야 검사가 일하고 있는 것입니다.",
+)
 
-        md(ALL_CONFIGS_MD.format(n=4, lab="01-lossless-structure") + '''
+out, meta = compress(before, pipeline=["sneaky"])
+print("몰래 삭제된 결과 :", out)
+print("status 필드가 없어졌는데도 JSON 으로는 멀쩡해 보입니다.")
+print("정규형 비교가 아니었다면 그냥 통과했을 것입니다.")
+
+del X.REGISTRY["sneaky"]'''),
+
+        md(ALL_CONFIGS_MD.format(n=5, lab="01-lossless-structure") + '''
 | 설정 | 입력 | 무엇을 보려고 |
 |---|---|---|
 | `structure` | 구조화 12건 | 이 랩의 기본 조건 |
@@ -519,7 +664,7 @@ for p in sorted(Path("configs").glob("*.yaml")):
     print(f'{cfg.name:22s} 절감 {m["saved"]:6.1%} · '
           f'검증 {m["steps_verified"]:2d}단계 · 손 안 댐 {m["untouched"]:2d}건{flag}')'''),
 
-        md(COMPARE_MD.format(n=5) + '''
+        md(COMPARE_MD.format(n=6) + '''
 **여기서 읽어야 할 것 두 가지입니다.**
 
 1. `structure` 와 `prose` 는 **코드가 한 글자도 안 다릅니다.** 입력만 다릅니다.
@@ -553,7 +698,7 @@ if "structure" in by and "structure-lossy-ws" in by:
           f'그 대가로 무손실 보장을 잃습니다.')'''),
 
         md('''
-## 6. 유형별 — 어디서 이득이 나나
+## 7. 유형별 — 어디서 이득이 나나
 
 무손실의 이득은 **중복의 양에 비례**합니다. 그래서 유형마다 크게 다릅니다.
 '''),
