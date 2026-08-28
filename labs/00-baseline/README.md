@@ -123,6 +123,37 @@ cd 00-baseline && python compress.py configs/noop-api.yaml
 > 2N회를 부르고, 압축률 스윕 10단계면 그만큼 곱해집니다. 결과는
 > `labs/kit/.cache/`에 남아 다음 실행부터 재사용됩니다(커밋 제외).
 
+### "API 호출 0회"가 나와도 정상입니다
+
+캐시가 잘 동작하고 있다는 뜻입니다. 처음 한 번은 실제로 호출이 나갑니다.
+
+```
+첫 실행    API 실측 — 새로 호출 12회, 캐시 재사용 12회 (같은 텍스트)   ← 약 25초
+두 번째    API 실측값 — 이번 실행은 호출 0회입니다.
+           이전 실행에서 받아 둔 12건을 24회 재사용했습니다              ← 즉시
+```
+
+"새로 호출 12회 · 캐시 재사용 12회"가 함께 나오는 이유는, 이 랩이 압축을
+하지 않아서 **압축 전과 후의 텍스트가 같기** 때문입니다. 앞쪽에서 부른 값을
+뒤쪽에서 그대로 씁니다.
+
+강제로 다시 부르고 싶으실 때는 이렇게 하시면 됩니다.
+
+```bash
+python compress.py configs/noop-api.yaml --refresh-tokens
+```
+
+설정 파일에 `tokenizer.refresh: true`를 넣으셔도 같습니다.
+
+정말 API를 타는지 확인해 보고 싶으시다면, 엔드포인트를 아무 값으로 바꿔서
+실패하는지 보시면 확실합니다.
+
+```bash
+AZURE_OPENAI_ENDPOINT=https://nope.cognitiveservices.azure.com \
+  python compress.py configs/noop-api.yaml --refresh-tokens
+# → 엔드포인트에 연결하지 못했습니다 …
+```
+
 ## 코퍼스
 
 기본값은 `labs/data/sample`입니다. **하네스 점검용 합성 데이터 12건**이고

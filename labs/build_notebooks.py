@@ -184,9 +184,10 @@ tokenizer:
         code('''
 counter = T.make_counter(cfg.tokenizer, cfg.model)
 print("측정 방식:", counter.backend)
+print("설명    :", counter.describe())
 
 sample = "환불 수수료는 결제금액의 10%입니다."
-print(f"예시 {len(sample)}자 → {counter(sample):,} 토큰")'''),
+print(f"\\n예시 {len(sample)}자 → {counter(sample):,} 토큰")'''),
 
         md('''
 ## 4. 코퍼스 살펴보기
@@ -288,6 +289,11 @@ else:
 
 `api` 조건은 `.env` 가 없으면 건너뜁니다. 건너뛴 이유를 표에 남겨서,
 "돌았는데 결과가 없는" 상태와 "아예 못 돌린" 상태를 구분합니다.
+
+> **"호출 0회" 가 나와도 놀라지 마세요.** 같은 텍스트를 이미 잰 적이 있으면
+> 디스크 캐시에서 꺼내 씁니다. 처음 한 번은 실제로 12회를 부르고 20초 남짓
+> 걸립니다. 강제로 다시 부르시려면 설정에 `refresh: true` 를 넣거나
+> 명령줄에서 `--refresh-tokens` 를 쓰시면 됩니다.
 '''),
         code('''
 def run_config(path):
@@ -308,19 +314,17 @@ def run_config(path):
     counter.save()
     if counter.stats():
         m["token_calls"] = counter.stats()
-    return cfg, m, run.finish(m, ["압축 없음. 다른 랩의 절감률은 이 결과를 기준으로 읽습니다."])
+    out = run.finish(m, ["압축 없음. 다른 랩의 절감률은 이 결과를 기준으로 읽습니다.",
+                         counter.describe()])
+    return cfg, m, out, counter
 
 
 results, skipped = [], []
 for p in sorted(Path("configs").glob("*.yaml")):
     try:
-        cfg, m, out = run_config(p)
+        cfg, m, out, cnt = run_config(p)
         results.append((cfg.name, m, out))
-        extra = ""
-        if m.get("token_calls"):
-            extra = (f' · API {m["token_calls"]["api_calls"]}회'
-                     f' · 캐시 {m["token_calls"]["cache_hits"]}회')
-        print(f'{p.name:20s} 절감 {m["saved"]:6.1%} · {m["token_backend"]}{extra}')
+        print(f'{p.name:20s} 절감 {m["saved"]:6.1%} · {cnt.describe()}')
     except Exception as e:
         skipped.append((p.name, f"{type(e).__name__}: {e}"))
         print(f"{p.name:20s} 건너뜀 — {type(e).__name__}: {str(e)[:80]}")

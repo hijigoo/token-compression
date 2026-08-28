@@ -70,6 +70,8 @@ def main() -> int:
     ap.add_argument("config", help="configs/*.yaml")
     ap.add_argument("--data")
     ap.add_argument("--limit", type=int)
+    ap.add_argument("--refresh-tokens", action="store_true",
+                    help="토큰 캐시를 무시하고 API 를 다시 부릅니다 (mode: api 일 때)")
     ap.add_argument("--out", default=str(LABS.parent / "runs"))
     ap.add_argument("--max-calls", type=int, help="API 호출 상한 (기본 200)")
     args = ap.parse_args()
@@ -83,7 +85,10 @@ def main() -> int:
     limit = args.limit if args.limit is not None else cfg.dataset.get("limit")
     cases = dataset.load(path, limit=limit)
     info = dataset.summarize(cases)
-    counter = T.make_counter(cfg.tokenizer, cfg.model)
+    tok_spec = dict(cfg.tokenizer)
+    if args.refresh_tokens:
+        tok_spec["refresh"] = True
+    counter = T.make_counter(tok_spec, cfg.model)
 
     deployment = (cfg.params.get("deployment")
                   or env.get("AZURE_OPENAI_DEPLOYMENT") or cfg.model)

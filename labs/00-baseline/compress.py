@@ -37,6 +37,8 @@ def main() -> int:
     ap.add_argument("config", help="configs/*.yaml")
     ap.add_argument("--data", help="코퍼스 경로 (config 값을 덮어씁니다)")
     ap.add_argument("--limit", type=int, help="케이스 수 제한")
+    ap.add_argument("--refresh-tokens", action="store_true",
+                    help="토큰 캐시를 무시하고 API 를 다시 부릅니다 (mode: api 일 때)")
     ap.add_argument("--out", default=str(LABS.parent / "runs"), help="결과 루트")
     args = ap.parse_args()
 
@@ -55,8 +57,14 @@ def main() -> int:
           f"must_include 있는 케이스 {info['with_must_include']}건")
     print(f"  유형 {info['kinds']}")
 
-    counter = T.make_counter(cfg.tokenizer, cfg.model)
+    tok_spec = dict(cfg.tokenizer)
+    if args.refresh_tokens:
+        tok_spec["refresh"] = True
+    counter = T.make_counter(tok_spec, cfg.model)
     print(f"  토큰 측정 {counter.backend}")
+    if getattr(counter, "preloaded", 0):
+        print(f"    캐시 {counter.preloaded}건 보유 — 이미 잰 텍스트는 다시 부르지 않습니다")
+        print(f"    강제로 다시 부르시려면 --refresh-tokens 를 붙여주세요")
 
     run = Run(cfg, args.out)
     for c in cases:
@@ -94,9 +102,7 @@ def main() -> int:
     if "survival_worst" in m:
         print(f"정답 보존율 평균 {m['survival_mean']:.1%} · 최저 {m['survival_worst']:.1%}")
     print(f"측정 방식 {m['token_backend']}")
-    if m.get("token_calls"):
-        st = m["token_calls"]
-        print(f"  API 호출 {st.get('api_calls', 0)}회 · 캐시 적중 {st.get('cache_hits', 0)}회")
+    print(f"  {counter.describe()}")
     print(f"\n결과 {out}")
 
     if problems:

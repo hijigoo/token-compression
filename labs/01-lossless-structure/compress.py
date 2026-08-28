@@ -121,6 +121,8 @@ def main() -> int:
     ap.add_argument("config", help="configs/*.yaml")
     ap.add_argument("--data", help="코퍼스 경로 (config 값을 덮어씁니다)")
     ap.add_argument("--limit", type=int)
+    ap.add_argument("--refresh-tokens", action="store_true",
+                    help="토큰 캐시를 무시하고 API 를 다시 부릅니다 (mode: api 일 때)")
     ap.add_argument("--out", default=str(LABS.parent / "runs"))
     args = ap.parse_args()
 
@@ -133,13 +135,19 @@ def main() -> int:
     limit = args.limit if args.limit is not None else cfg.dataset.get("limit")
     cases = dataset.load(path, limit=limit)
     info = dataset.summarize(cases)
-    counter = T.make_counter(cfg.tokenizer, cfg.model)
+    tok_spec = dict(cfg.tokenizer)
+    if args.refresh_tokens:
+        tok_spec["refresh"] = True
+    counter = T.make_counter(tok_spec, cfg.model)
 
     pipeline = cfg.params.get("pipeline") or X.DEFAULT_PIPELINE
     print(f"코퍼스 {path}")
     print(f"  케이스 {info['n_cases']}건 · {info['n_chars']:,}자 · 유형 {info['kinds']}")
     print(f"  파이프라인 {' → '.join(pipeline)}")
     print(f"  토큰 측정 {counter.backend}")
+    if getattr(counter, "preloaded", 0):
+        print(f"    캐시 {counter.preloaded}건 보유 — 이미 잰 텍스트는 다시 부르지 않습니다")
+        print(f"    강제로 다시 부르시려면 --refresh-tokens 를 붙여주세요")
 
     run = Run(cfg, args.out)
     broken, applied_count, untouched = [], {}, 0

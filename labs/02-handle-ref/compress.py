@@ -122,6 +122,8 @@ def main() -> int:
     ap.add_argument("config", help="configs/*.yaml")
     ap.add_argument("--data")
     ap.add_argument("--limit", type=int)
+    ap.add_argument("--refresh-tokens", action="store_true",
+                    help="토큰 캐시를 무시하고 API 를 다시 부릅니다 (mode: api 일 때)")
     ap.add_argument("--out", default=str(LABS.parent / "runs"))
     ap.add_argument("--sweep", help="expand_k 를 여러 값으로 (예: 0,1,2,3,all)")
     args = ap.parse_args()
@@ -135,7 +137,10 @@ def main() -> int:
     limit = args.limit if args.limit is not None else cfg.dataset.get("limit")
     cases = dataset.load(path, limit=limit)
     info = dataset.summarize(cases)
-    counter = T.make_counter(cfg.tokenizer, cfg.model)
+    tok_spec = dict(cfg.tokenizer)
+    if args.refresh_tokens:
+        tok_spec["refresh"] = True
+    counter = T.make_counter(tok_spec, cfg.model)
 
     no_q = sum(1 for c in cases if not c.question)
     print(f"코퍼스 {path}")
@@ -144,6 +149,9 @@ def main() -> int:
           f"라우팅 {cfg.params.get('route', 'bigram')} · "
           f"다이제스트 {cfg.params.get('digest_chars', 24)}자")
     print(f"  토큰 측정 {counter.backend}")
+    if getattr(counter, "preloaded", 0):
+        print(f"    캐시 {counter.preloaded}건 보유 — 이미 잰 텍스트는 다시 부르지 않습니다")
+        print(f"    강제로 다시 부르시려면 --refresh-tokens 를 붙여주세요")
     if no_q:
         print(f"  주의: 질문 없는 케이스 {no_q}건 — 라우팅 없이 앞에서 자릅니다")
 

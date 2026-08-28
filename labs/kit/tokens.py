@@ -95,6 +95,12 @@ class LocalCounter:
     def stats(self) -> Dict[str, int]:
         return {}
 
+    def describe(self) -> str:
+        if self.backend.startswith("heuristic"):
+            return ("문자 기반 근사 — tiktoken 이 없습니다. "
+                    "다른 실행과 비교하시려면 측정 방식이 같아야 합니다")
+        return f"로컬 계산 ({self.backend}) — API 호출 없음"
+
 
 def make_counter(spec: Optional[Dict[str, Any]] = None, model: Optional[str] = None):
     """설정에 따라 토큰 카운터를 만듭니다.
@@ -119,6 +125,7 @@ def make_counter(spec: Optional[Dict[str, Any]] = None, model: Optional[str] = N
             endpoint=spec.get("endpoint"),
             cache=spec.get("cache", True),
             api_version=spec.get("api_version", "preview"),
+            refresh=spec.get("refresh", False),
         )
 
     raise ValueError(f"알 수 없는 tokenizer.mode: {mode} (local | api)")

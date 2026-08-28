@@ -43,6 +43,17 @@ def _find_az() -> str:
     )
 
 
+def _mask(url: str) -> str:
+    """오류 메시지에 리소스 이름이 그대로 남지 않게 가립니다."""
+    try:
+        scheme, rest = url.split("://", 1)
+        host = rest.split("/")[0]
+        name, _, domain = host.partition(".")
+        return f"{scheme}://{name[:5]}***.{domain}"
+    except ValueError:
+        return "***"
+
+
 def _headers() -> Dict[str, str]:
     key = os.environ.get("AZURE_OPENAI_API_KEY")
     if key:
@@ -68,7 +79,8 @@ class ApiCounter:
     backend_name = "api"
 
     def __init__(self, deployment: str, endpoint: Optional[str] = None,
-                 cache: bool = True, api_version: str = "preview"):
+                 cache: bool = True, api_version: str = "preview",
+                 refresh: bool = False):
         self.deployment = deployment
         self.endpoint = (endpoint or os.environ.get("AZURE_OPENAI_ENDPOINT") or "").rstrip("/")
         if not self.endpoint:
@@ -80,11 +92,14 @@ class ApiCounter:
 
         self.cache_path = CACHE_DIR / f"tokens-{deployment}.json" if cache else None
         self._mem: Dict[str, int] = {}
-        if self.cache_path and self.cache_path.exists():
+        if self.cache_path and self.cache_path.exists() and not refresh:
             try:
                 self._mem = json.loads(self.cache_path.read_text(encoding="utf-8"))
             except Exception:
                 self._mem = {}
+        # 시작 시점에 몇 건을 들고 있었는지 남깁니다. "이번 실행에서 호출이
+        # 0회" 인 것과 "애초에 API 를 안 쓴다" 를 구분해서 보여주려는 것입니다.
+        self.preloaded = len(self._mem)
 
     @property
     def backend(self) -> str:
@@ -113,6 +128,13 @@ class ApiCounter:
             raise RuntimeError(
                 f"토큰 실측 실패 HTTP {e.code}: {e.read().decode('utf-8','replace')[:300]}"
             ) from e
+        except urllib.error.URLError as e:
+            raise RuntimeError(
+                f"엔드포인트에 연결하지 못했습니다 ({e.reason}).\n"
+                f"  대상: {_mask(self.endpoint)}\n"
+                f"  .env 의 AZURE_OPENAI_ENDPOINT 를 확인해 주세요.\n"
+                f"  네트워크 없이 돌리시려면 tokenizer.mode 를 local 로 바꾸시면 됩니다."
+            ) from e
 
         n = int((d.get("usage") or {}).get("input_tokens") or 0)
         self.calls += 1
@@ -133,7 +155,24 @@ class ApiCounter:
 
     def stats(self) -> Dict[str, int]:
         return {"api_calls": self.calls, "cache_hits": self.hits,
-                "cached_entries": len(self._mem)}
+                "cached_entries": len(self._mem), "preloaded": self.preloaded}
+
+    def describe(self) -> str:
+        """실행 뒤 무슨 일이 있었는지 한 줄로 설명합니다.
+
+        "API 호출 0회" 만 찍으면 API 를 아예 안 쓴 것처럼 보입니다.
+        실제로는 이전 실행에서 받아 둔 값을 재사용한 것이므로 구분해서
+        보여줍니다.
+        """
+        if self.calls and self.hits:
+            return (f"API 실측 — 새로 호출 {self.calls}회, "
+                    f"캐시 재사용 {self.hits}회 (같은 텍스트)")
+        if self.calls:
+            return f"API 실측 — 새로 호출 {self.calls}회"
+        if self.hits:
+            return (f"API 실측값 — 이번 실행은 호출 0회입니다. "
+                    f"이전 실행에서 받아 둔 {self.preloaded}건을 {self.hits}회 재사용했습니다")
+        return "API 실측 — 잰 텍스트가 없습니다"
 
 
 def complete(prompt: str, deployment: str, endpoint: Optional[str] = None,
