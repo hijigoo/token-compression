@@ -213,8 +213,16 @@ def main() -> int:
 
     print(f"\n절감 {m['saved']:.1%} · 토큰 {m['tokens_before']:,} → {m['tokens_after']:,}")
     print(f"정답 보존율 평균 {m['survival_mean']:.1%} · 최저 {m['survival_worst']:.1%}")
-    print(f"검증 {n_checked}단계 통과" +
-          (f" · {n_unchecked}단계 검증 불가" if n_unchecked else ""))
+    n_applied = sum(applied_count.values())
+    print(f"변환 {n_applied}번 적용 · 그중 {n_checked}번 검증" +
+          (f" · {n_unchecked}번 검증 못 함" if n_unchecked else ""))
+    if applied_count:
+        for name, cnt in sorted(applied_count.items(), key=lambda x: -x[1]):
+            t = X.REGISTRY[name]
+            how = ("되돌려서 원본과 글자 비교" if t.restore else
+                   "파싱해서 값끼리 비교" if t.canon else "확인할 방법 없음")
+            mark = "" if t.checkable else "  ← 검증 못 함"
+            print(f"  {name:18s} {cnt}회 · {how}{mark}")
     if untouched:
         print(f"압축 못 한 케이스 {untouched}/{len(cases)}건 — 적용할 변환이 없었습니다")
     print(f"\n결과 {out}")

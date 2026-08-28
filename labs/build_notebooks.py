@@ -783,7 +783,7 @@ def run_config(path):
     counter = T.make_counter(cfg.tokenizer, cfg.model)
 
     run = Run(cfg, RUNS)
-    broken, applied_count, untouched = [], {}, 0
+    broken, applied_count, verified_count, untouched = [], {}, {}, 0
     n_checked = n_unchecked = 0
 
     for c in cases:
@@ -795,8 +795,14 @@ def run_config(path):
         n_unchecked += len(steps) - checked
         if not ok:
             broken.append((c.id, why))
-        for n in extra["applied"]:
-            applied_count[n] = applied_count.get(n, 0) + 1
+
+        # 어떤 변환이 몇 번 쓰였고 그중 몇 번이 검증됐는지 따로 셉니다.
+        # 합계만 보면 "12단계 검증" 이 무엇을 검증한 건지 알 수 없습니다.
+        for name, _src, _dst in steps:
+            applied_count[name] = applied_count.get(name, 0) + 1
+            if X.REGISTRY[name].checkable:
+                verified_count[name] = verified_count.get(name, 0) + 1
+
         if not extra["applied"]:
             untouched += 1
         run.add(metrics.per_case(c.id, c.kind, c.text, after, c.must_include,
@@ -805,10 +811,13 @@ def run_config(path):
 
     m = metrics.aggregate(run.records, counter)
     m.update({"dataset_name": Path(cfg.dataset["path"]).name,
-              "applied_count": applied_count, "untouched": untouched,
+              "applied_count": applied_count, "verified_count": verified_count,
+              "untouched": untouched,
               "steps_verified": n_checked, "steps_unverified": n_unchecked,
               "broken": broken})
-    return cfg, m, run.finish(m, [f"적용 횟수 {applied_count or '없음'}"])
+    counter.save()
+    return cfg, m, run.finish(m, [f"적용 횟수 {applied_count or '없음'}",
+                                  counter.describe()])
 
 
 results = []
@@ -817,7 +826,50 @@ for p in sorted(Path("configs").glob("*.yaml")):
     results.append((cfg.name, m, out))
     flag = " ← 검증 불가 포함" if m["steps_unverified"] else ""
     print(f'{cfg.name:22s} 절감 {m["saved"]:6.1%} · '
-          f'검증 {m["steps_verified"]:2d}단계 · 압축 못 함 {m["untouched"]:2d}건{flag}')'''),
+          f'변환 {sum(m["applied_count"].values()):2d}번 적용 · '
+          f'그중 {m["steps_verified"]:2d}번 검증{flag}')'''),
+
+        md('''
+### 무엇을 검증한 것인가
+
+위 줄의 "12번 검증" 이 뭉뚱그려져 있어서, **어떤 변환을 어떤 방법으로**
+확인했는지 아래에 풀어 놓았습니다.
+'''),
+        code('''
+by = {n: m for n, m, _ in results}
+base = by.get("structure", results[0][1])
+
+rows = []
+for name in X.DEFAULT_PIPELINE + ["ws_collapse"]:
+    applied = base["applied_count"].get(name, 0)
+    if applied == 0:
+        continue
+    t = X.REGISTRY[name]
+    how = ("되돌려서 원본과 글자 비교" if t.restore else
+           "파싱해서 값끼리 비교" if t.canon else "확인할 방법 없음")
+    ok = base["verified_count"].get(name, 0)
+    rows.append([name, how, f"{applied}회",
+                 f"{ok}회" if ok == applied else f"{ok}회 ← 못 함"])
+
+table(
+    ["변환", "어떻게 확인했나", "적용", "검증"],
+    rows,
+    foot=["합계", "",
+          f'{sum(base["applied_count"].values())}회',
+          f'{base["steps_verified"]}회'],
+    align=["left", "left", "right", "right"],
+    title="structure 조건에서 검증한 내역",
+    note="'적용' 과 '검증' 이 같아야 그 조건 전체를 무손실이라 부를 수 있습니다.",
+)
+
+lossy = by.get("structure-lossy-ws")
+if lossy:
+    missed = {k: v - lossy["verified_count"].get(k, 0)
+              for k, v in lossy["applied_count"].items()
+              if lossy["verified_count"].get(k, 0) < v}
+    print(f'structure-lossy-ws 에서 검증 못 한 변환: {missed}')
+    print("공백을 접으면 원래 몇 칸이었는지 정보가 사라져서, 되돌릴 수도")
+    print("파싱해서 비교할 수도 없습니다. 그래서 이 조건은 무손실이 아닙니다.")'''),
 
         md(COMPARE_MD.format(n=6) + '''
 **여기서 읽어야 할 것 두 가지입니다.**
@@ -828,13 +880,14 @@ for p in sorted(Path("configs").glob("*.yaml")):
 '''),
         code('''
 table(
-    ["설정", "코퍼스", "절감", "최저 보존율", "검증", "검증 불가", "압축 못 함"],
+    ["설정", "코퍼스", "절감", "최저 보존율", "변환 적용", "검증됨", "검증 못 함", "압축 못 함"],
     [[n, m["dataset_name"], pct(m["saved"]), pct(m.get("survival_worst")),
-      f'{m["steps_verified"]}단계',
-      f'{m["steps_unverified"]}단계' if m["steps_unverified"] else "없음",
+      f'{sum(m["applied_count"].values())}번',
+      f'{m["steps_verified"]}번',
+      f'{m["steps_unverified"]}번' if m["steps_unverified"] else "없음",
       f'{m["untouched"]}건']
      for n, m, _ in results],
-    align=["left", "left", "right", "right", "right", "right", "right"],
+    align=["left", "left", "right", "right", "right", "right", "right", "right"],
     title="조건 비교",
     note="'압축 못 함' 은 적용할 변환이 하나도 없어서 원문 그대로 나간 케이스입니다. "
          "산문이 대부분 여기 해당합니다. "
@@ -845,7 +898,6 @@ for n, m, _ in results:
     if m["broken"]:
         print(f"✗ {n}: 정보 손실 {len(m['broken'])}건 — {m['broken'][:2]}")
 
-by = {n: m for n, m, _ in results}
 if "structure" in by and "prose" in by:
     print(f'같은 코드, 다른 입력: 구조화 {by["structure"]["saved"]:.1%} '
           f'vs 산문 {by["prose"]["saved"]:.1%}')
