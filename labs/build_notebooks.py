@@ -201,6 +201,50 @@ sample = "환불 수수료는 결제금액의 10%입니다."
 print(f"\\n예시 {len(sample)}자 → {counter(sample):,} 토큰")'''),
 
         md('''
+지금 설정(`noop.yaml`)은 `local` 이라 위 셀에서는 **API 를 부르지 않았습니다.**
+말로만 읽으면 두 방식의 차이가 잘 안 와닿으니, 실제로 한 번 불러서
+같은 텍스트를 두 방식으로 재보겠습니다.
+
+**호출은 텍스트당 1회씩, 아래 3건이 전부입니다.** `.env` 가 없으면 건너뜁니다.
+'''),
+        code('''
+probe = ["환불 수수료는 결제금액의 10%입니다.",
+         "주문번호 A-1003 은 환불 완료 상태입니다.",
+         ("제7조 환불 시 결제금액의 10%를 수수료로 공제한다. "
+          "제9조 단, 결제 후 7일 이내 취소는 수수료를 면제한다. "
+          "제10조 분쟁은 서울중앙지방법원을 관할로 한다.")]
+
+local_c = T.make_counter({"mode": "local"}, cfg.model)
+
+try:
+    api_c = T.make_counter(
+        {"mode": "api", "deployment": env.get("AZURE_OPENAI_DEPLOYMENT"),
+         "cache": True}, cfg.model)
+    rows = []
+    for t in probe:
+        a, b = local_c(t), api_c(t)
+        rows.append([t[:30] + ("…" if len(t) > 30 else ""),
+                     f"{len(t)}자", f"{a:,}", f"{b:,}", f"{b - a:+d}"])
+    api_c.save()
+
+    table(
+        ["텍스트", "길이", "local", "api", "차이"],
+        rows,
+        align=["left", "right", "right", "right", "right"],
+        title="같은 텍스트를 두 방식으로",
+        note="차이가 어느 텍스트에서나 같은 값이면 그건 내용이 아니라 "
+             "메시지 포맷 오버헤드입니다.",
+    )
+    print(api_c.describe())
+    print("\\n차이가 일정한 이유 — 요청을 보낼 때 역할 구분자 같은 것이 붙습니다.")
+    print("텍스트가 길든 짧든 똑같이 붙으므로 상수만큼 차이가 납니다.")
+except Exception as e:
+    print(f"api 측정을 건너뜁니다 — {type(e).__name__}: {str(e)[:160]}")
+    print("\\n자격증명이 있으면 아래로 준비하실 수 있습니다.")
+    print("  cd labs && cp .env.example .env")
+    print("없어도 이 노트북의 나머지는 local 로 전부 돌아갑니다.")'''),
+
+        md('''
 ## 4. 코퍼스 살펴보기
 
 `must_include` 는 **정답에 꼭 필요한 문자열**입니다. 이게 있어야 보존율을
