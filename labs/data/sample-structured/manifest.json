@@ -1,0 +1,9 @@
+{
+  "name": "sample-structured",
+  "source": "합성 — labs/data/make_synthetic.py",
+  "revision": "v1",
+  "license": "저장소와 동일 (합성 데이터, 실제 고객 데이터 없음)",
+  "n_samples": 12,
+  "added_at": "2026-08-28",
+  "note": "구조화 텍스트(JSON/로그/키값/표/XML) 6종 각 2건. 무손실 변환이 먹는 '표현의 중복'이 들어 있습니다."
+}

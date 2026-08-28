@@ -1,0 +1,19 @@
+# 라우팅 없이 문서 **앞에서** k개만 펼칩니다. 가장 흔한 절단 방식입니다.
+# k1.yaml 과 같은 조건인데 고르는 방법만 다릅니다 —
+# 라우팅이 값을 하는지 보려면 이것과 나란히 놓아야 합니다.
+name: k1-no-router
+lab: 02-handle-ref
+
+dataset:
+  path: ../../data/sample-long
+
+model: gpt-5.4
+
+params:
+  expand_k: 1
+  route: first          # ← 라우팅 없음
+  split: auto
+  digest_chars: 24
+
+tokenizer:
+  mode: local

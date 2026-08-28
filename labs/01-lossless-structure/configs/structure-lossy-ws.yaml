@@ -1,0 +1,23 @@
+# 공백 접기까지 켭니다. 의미는 지키지만 **되돌릴 수 없습니다** —
+# 원래 공백이 몇 칸이었는지 정보가 사라지기 때문입니다.
+# 얼마를 더 얻고 무엇을 포기하는지 보려는 조건입니다.
+name: structure-lossy-ws
+lab: 01-lossless-structure
+
+dataset:
+  path: ../../data/sample-structured
+
+model: gpt-5.4
+
+params:
+  pipeline:
+    - json_to_table
+    - json_compact
+    - log_dedup
+    - xml_compact
+    - md_table_compact
+    - kv_compact
+    - ws_collapse       # ← 되돌리기 없음
+
+tokenizer:
+  mode: local

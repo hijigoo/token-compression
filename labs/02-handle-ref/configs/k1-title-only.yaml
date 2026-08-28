@@ -1,0 +1,18 @@
+# 다이제스트를 제목만으로 줄입니다. 오버헤드를 얼마나 깎을 수 있고
+# 그 대가로 라우팅이 얼마나 나빠지는지 보는 조건입니다.
+name: k1-title-only
+lab: 02-handle-ref
+
+dataset:
+  path: ../../data/sample-long
+
+model: gpt-5.4
+
+params:
+  expand_k: 1
+  route: bigram         # bigram(질문 기반) | first(앞에서) | last(뒤에서)
+  split: auto
+  digest_chars: 0       # 제목만 남깁니다
+
+tokenizer:
+  mode: local

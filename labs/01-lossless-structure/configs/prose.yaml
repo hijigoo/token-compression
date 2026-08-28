@@ -1,0 +1,21 @@
+# 같은 변환을 산문에 겁니다. 거의 0% 가 나오는 것이 정상이고,
+# 그게 "무손실로 얻을 게 있는지는 입력이 정한다" 는 결론입니다.
+name: prose
+lab: 01-lossless-structure
+
+dataset:
+  path: ../../data/sample
+
+model: gpt-5.4
+
+params:
+  pipeline:
+    - json_to_table
+    - json_compact
+    - log_dedup
+    - xml_compact
+    - md_table_compact
+    - kv_compact
+
+tokenizer:
+  mode: local

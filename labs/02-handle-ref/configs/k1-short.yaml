@@ -1,0 +1,19 @@
+# 짧은 산문에 같은 기법을 겁니다. 절 표시가 없어 문장 단위로 쪼개지고,
+# 다이제스트 오버헤드가 절감을 잡아먹는 구간을 보여줍니다.
+name: k1-short
+lab: 02-handle-ref
+
+dataset:
+  path: ../../data/sample
+
+model: gpt-5.4
+
+params:
+  expand_k: 1
+  route: bigram         # bigram(질문 기반) | first(앞에서) | last(뒤에서)
+  split: sentence
+  per_block: 2
+  digest_chars: 20
+
+tokenizer:
+  mode: local

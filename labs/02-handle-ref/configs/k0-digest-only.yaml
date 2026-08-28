@@ -1,0 +1,18 @@
+# 아무것도 안 펼칩니다. 절감의 상한이자 보존율의 하한입니다.
+# 실제로는 이 상태로 모델에게 주고, 모델이 핸들을 보고 도구를 부릅니다.
+name: k0-digest-only
+lab: 02-handle-ref
+
+dataset:
+  path: ../../data/sample-long
+
+model: gpt-5.4
+
+params:
+  expand_k: 0
+  route: bigram         # bigram(질문 기반) | first(앞에서) | last(뒤에서)
+  split: auto
+  digest_chars: 24
+
+tokenizer:
+  mode: local

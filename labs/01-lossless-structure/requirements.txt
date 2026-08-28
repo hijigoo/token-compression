@@ -1,0 +1,2 @@
+# 이 랩은 표준 라이브러리만 씁니다. kit 의존성만 있으면 됩니다.
+-r ../kit/requirements.txt

@@ -93,6 +93,9 @@ labs/data/**
 
 # sample/ 은 예외 — 합성 데이터이고 하네스 스모크 테스트에 필요합니다
 !labs/data/sample/**
+!labs/data/sample-structured/**
+!labs/data/sample-long/**
+!labs/data/make_synthetic.py
 
 # ─────────────────────────────────────────────────────────────
 # DeepSWE 데이터셋 (labs/agentic-eval/)

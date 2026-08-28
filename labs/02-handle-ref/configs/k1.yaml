@@ -1,0 +1,17 @@
+# 질문에 가장 맞는 절 1개만 펼칩니다. 이 랩의 기본 조건입니다.
+name: k1
+lab: 02-handle-ref
+
+dataset:
+  path: ../../data/sample-long
+
+model: gpt-5.4
+
+params:
+  expand_k: 1
+  route: bigram         # bigram(질문 기반) | first(앞에서) | last(뒤에서)
+  split: auto           # auto | section | paragraph | sentence
+  digest_chars: 24      # 안 펼친 블록에 남길 미리보기 길이. 0 이면 제목만.
+
+tokenizer:
+  mode: local

@@ -1,0 +1,22 @@
+# 구조화 텍스트에 무손실 변환을 겁니다. 이 랩의 기본 조건입니다.
+name: structure
+lab: 01-lossless-structure
+
+dataset:
+  path: ../../data/sample-structured
+
+model: gpt-5.4
+
+params:
+  # 순서가 결과를 바꿉니다. json_to_table 이 성공하면 json_compact 는
+  # 건너뜁니다 — 표로 편 쪽이 더 작기 때문입니다.
+  pipeline:
+    - json_to_table
+    - json_compact
+    - log_dedup
+    - xml_compact
+    - md_table_compact
+    - kv_compact
+
+tokenizer:
+  mode: local
