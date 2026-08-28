@@ -35,6 +35,49 @@ LLM 컨텍스트 압축 기법을 동일 조건에서 비교하는 실험 저장
 
 같은 라이브러리라도 두 축에서 파라미터가 다르다. 묻는 질문이 다르기 때문이다.
 
+## 랩 현황
+
+| 랩 | 무엇을 | 절감 | 최저 보존율 | 의존성 | 상태 |
+|---|---|---|---|---|---|
+| [`00-baseline`](labs/00-baseline/) | 압축 없음 (기준선) | 0% | 100% | 없음 | 완료 |
+| [`01-lossless-structure`](labs/01-lossless-structure/) | 표현의 중복만 제거 | 28.5% | 100% | 없음 | 완료 |
+| [`02-handle-ref`](labs/02-handle-ref/) | 밖에 두고 핸들만 | 50.9% | 100% | 없음 | 완료 |
+| [`03-summarize-llm`](labs/03-summarize-llm/) | LLM 추상 요약 | 89.2% | 100% | **API** | 완료 |
+| `04-llmlingua` | 토큰 프루닝 | — | — | torch | 예정 |
+| `05-headroom` | CCR 라이브러리 | — | — | pip | 예정 |
+| `06-opencode` | 에이전트 세션 압축 | — | — | bun/npm | 예정 |
+
+숫자는 각 랩의 권장 조건 기준입니다. **절감률만 보면 안 됩니다** — 같은 랩에서
+조건을 바꾸면 절감이 커지면서 보존율이 0%가 되기도 합니다. 각 랩 README의
+조건 비교표를 보세요.
+
+랩끼리는 서로를 import하지 않습니다. 공통 기반은 [`labs/kit`](labs/kit/)뿐이고,
+방향은 랩 → kit 단방향입니다.
+
+### 각 랩에는 노트북이 있습니다
+
+```bash
+cd labs/01-lossless-structure && jupyter lab run.ipynb
+```
+
+노트북은 원리를 한 단계씩 보여준 뒤, 마지막에 그 랩의 `configs/*.yaml`을
+**전부 찾아 돌리고 조건을 비교**합니다. 설정을 추가해도 노트북은 고칠 필요가
+없습니다. 노트북은 [`labs/build_notebooks.py`](labs/build_notebooks.py)로 찍습니다.
+
+### 코퍼스
+
+```bash
+cd labs/data && python make_synthetic.py
+```
+
+합성 데이터입니다 — 실제 고객 데이터가 섞일 수 없습니다.
+
+| 코퍼스 | 구성 | 주 소비자 |
+|---|---|---|
+| `sample` | 짧은 산문 12건 (숫자·부정·식별자 밀집) | 전 랩 |
+| `sample-structured` | JSON·로그·표·XML 12건 | `01` |
+| `sample-long` | 7개 절 장문 8건, 정답은 한 절에만 | `02`, `03` |
+
 ## 시작하기
 
 ```bash

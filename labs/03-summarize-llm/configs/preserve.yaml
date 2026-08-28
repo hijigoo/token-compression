@@ -1,0 +1,19 @@
+# 숫자·식별자·부정어를 글자 그대로 남기라고 못 박습니다.
+# 이 랩의 권장 조건입니다.
+name: preserve
+lab: 03-summarize-llm
+
+dataset:
+  path: ../../data/sample-long
+
+model: gpt-5.4
+
+params:
+  style: preserve
+  target_ratio: 0.4       # 목표 길이 = 원문의 40%
+  cache: true             # 같은 프롬프트는 다시 안 부릅니다
+  max_calls: 200
+  max_output_tokens: 2048 # 추론 모델은 생각하는 데도 출력 토큰을 씁니다
+
+tokenizer:
+  mode: local

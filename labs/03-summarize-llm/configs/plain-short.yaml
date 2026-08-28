@@ -1,0 +1,19 @@
+# 짧은 산문(평균 150자)에 같은 기법을 겁니다.
+# 숫자·식별자·부정어가 밀집해 있어 요약이 가장 위험한 입력입니다.
+name: plain-short
+lab: 03-summarize-llm
+
+dataset:
+  path: ../../data/sample
+
+model: gpt-5.4
+
+params:
+  style: plain
+  target_ratio: 0.5
+  cache: true
+  max_calls: 200
+  max_output_tokens: 2048
+
+tokenizer:
+  mode: local

@@ -134,3 +134,49 @@ class ApiCounter:
     def stats(self) -> Dict[str, int]:
         return {"api_calls": self.calls, "cache_hits": self.hits,
                 "cached_entries": len(self._mem)}
+
+
+def complete(prompt: str, deployment: str, endpoint: Optional[str] = None,
+             max_output_tokens: int = 2048, api_version: str = "preview",
+             timeout: int = 300) -> tuple:
+    """Responses API 로 텍스트를 받습니다. (본문, usage) 를 돌려줍니다.
+
+    랩마다 HTTP 코드를 복사하지 않으려고 여기 둡니다. 인증은 위와 같습니다
+    (API 키가 있으면 키, 없으면 az CLI 의 Entra ID 토큰).
+
+    ⚠️ 추론 모델은 출력 토큰을 생각하는 데도 씁니다. `max_output_tokens` 가
+    빠듯하면 `status=incomplete` 로 **빈 본문**이 돌아옵니다. 조용히 빈
+    문자열을 반환하면 "압축률 100%" 라는 엉터리 결과가 나오므로 예외를 냅니다.
+    """
+    ep = (endpoint or os.environ.get("AZURE_OPENAI_ENDPOINT") or "").rstrip("/")
+    if not ep:
+        raise RuntimeError("AZURE_OPENAI_ENDPOINT 가 없습니다 (.env 확인)")
+
+    req = urllib.request.Request(
+        f"{ep}/openai/v1/responses?api-version={api_version}",
+        data=json.dumps({"model": deployment, "input": prompt,
+                         "max_output_tokens": max_output_tokens}).encode(),
+        headers=_headers(), method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            d = json.loads(r.read().decode())
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(
+            f"호출 실패 HTTP {e.code}: {e.read().decode('utf-8', 'replace')[:300]}"
+        ) from e
+
+    text = d.get("output_text") or ""
+    if not text:
+        for item in d.get("output") or []:
+            for c in item.get("content") or []:
+                if c.get("type") == "output_text":
+                    text += c.get("text") or ""
+
+    usage = d.get("usage") or {}
+    if not text.strip():
+        raise RuntimeError(
+            f"본문이 비어 있습니다 (status={d.get('status')}, "
+            f"reason={(d.get('incomplete_details') or {}).get('reason')}). "
+            f"max_output_tokens 를 늘려보세요 — 추론 모델은 생각하는 데도 "
+            f"출력 토큰을 씁니다.")
+    return text.strip(), usage

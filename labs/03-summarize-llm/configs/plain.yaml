@@ -1,0 +1,18 @@
+# 그냥 요약하라고만 합니다. 무엇이 사라지는지 보려는 대조군입니다.
+name: plain
+lab: 03-summarize-llm
+
+dataset:
+  path: ../../data/sample-long
+
+model: gpt-5.4
+
+params:
+  style: plain
+  target_ratio: 0.4       # 목표 길이 = 원문의 40%
+  cache: true             # 같은 프롬프트는 다시 안 부릅니다
+  max_calls: 200
+  max_output_tokens: 2048 # 추론 모델은 생각하는 데도 출력 토큰을 씁니다
+
+tokenizer:
+  mode: local

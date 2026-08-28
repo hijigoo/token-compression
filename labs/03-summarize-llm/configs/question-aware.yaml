@@ -1,0 +1,19 @@
+# 질문을 알려주고 그에 필요한 것을 남기라고 합니다.
+# 무엇을 남길지 판단할 근거가 생깁니다.
+name: question-aware
+lab: 03-summarize-llm
+
+dataset:
+  path: ../../data/sample-long
+
+model: gpt-5.4
+
+params:
+  style: question_aware
+  target_ratio: 0.4       # 목표 길이 = 원문의 40%
+  cache: true             # 같은 프롬프트는 다시 안 부릅니다
+  max_calls: 200
+  max_output_tokens: 2048 # 추론 모델은 생각하는 데도 출력 토큰을 씁니다
+
+tokenizer:
+  mode: local

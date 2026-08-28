@@ -858,9 +858,276 @@ print("실제 장문(수천~수만 토큰)에서는 다이제스트 비중이 �
     ])
 
 
+# ══════════════════════════════════════════════════════════════════
+# 03-summarize-llm
+# ══════════════════════════════════════════════════════════════════
+
+def nb_03() -> dict:
+    return notebook([
+        md("""
+# 03-summarize-llm — 모델에게 요약시키기
+
+앞의 두 랩과 결정적으로 다릅니다.
+
+| | 정보는 | 되돌리기 | 의존성 |
+|---|---|---|---|
+| [`01`](../01-lossless-structure/run.ipynb) | 아무것도 안 버립니다 | 가능 | 없음 |
+| [`02`](../02-handle-ref/run.ipynb) | 밖에 두고 핸들만 | 꺼내면 원문 | 없음 |
+| **`03`** | **버립니다** | **불가** | **API** |
+
+버리는 만큼 많이 줄어듭니다. 문제는 **무엇을 버렸는지 모른다**는 것입니다.
+
+> **이 랩의 결론을 미리 말하면** — 같은 모델·같은 문서·같은 목표 길이인데
+> 프롬프트만 바꿨더니 보존율이 33.3% → 88.9% 가 됐습니다.
+> 그러면서 **절감도 더 커졌습니다.**
+
+## ⚠️ 이 노트북은 유료입니다
+
+케이스 N건 = 요약 호출 N회입니다. 같은 프롬프트는 디스크에 캐시되므로
+두 번째 실행부터 0회입니다. 아래 셀에서 예상 호출 수를 먼저 확인합니다.
+"""),
+        md("## 1. kit 과 요약기 불러오기"),
+        code(BOOTSTRAP + '''
+from summarize import STYLES, Summarizer
+from compress import compress
+
+DEPLOY = env.get("AZURE_OPENAI_DEPLOYMENT")
+print("배포명    :", DEPLOY or "(없음 — .env 를 확인하세요)")
+print("엔드포인트:", env.mask_endpoint(env.get("AZURE_OPENAI_ENDPOINT")))
+print("스타일    :", list(STYLES))'''),
+
+        md("""
+## 2. 프롬프트 세 가지
+
+압축률을 정하는 건 알고리즘이 아니라 **무엇을 지키라고 말했는지**입니다.
+
+| 스타일 | 무엇을 알려주나 |
+|---|---|
+| `plain` | 그냥 요약하라고만 합니다 |
+| `question_aware` | 질문을 알려주고 그에 필요한 것을 남기라고 합니다 |
+| `preserve` | 숫자·식별자·부정어를 **글자 그대로** 남기라고 못 박습니다 |
+
+`preserve` 가 필요한 이유는, 요약 모델이 "결제금액의 12%" 를 "일정 비율" 로
+바꾸는 것을 요약이라고 생각하기 때문입니다.
+"""),
+        code('''
+cases = dataset.load("../data/sample")
+c = cases[1]          # doc-002 — 금액이 답인 케이스
+
+print(f"[{c.id}] {c.kind} · 질문: {c.question}")
+print(f"must_include: {c.must_include}\\n")
+
+for style in STYLES:
+    s = Summarizer(DEPLOY, style=style, target_ratio=0.5)
+    p = s.prompt_for(c.text, c.question)
+    head = p.split("문서:")[0].strip()
+    print(f"── {style} ──")
+    print(head[:300])
+    print()'''),
+
+        md("""
+## 3. 한 케이스로 눈으로 보기
+
+캐시가 있으면 호출이 안 나갑니다. 아래는 스타일마다 1회씩, 최대 3회입니다.
+"""),
+        code('''
+counter = T.make_counter({}, "gpt-5.4")
+print(f"원문 {len(c.text)}자 · {counter(c.text)} 토큰")
+print(c.text, "\\n")
+
+for style in STYLES:
+    s = Summarizer(DEPLOY, style=style, target_ratio=0.5)
+    out, meta = s(c.text, c.question)
+    s.save()
+    kept = [m for m in c.must_include if m.replace(",", "") in out.replace(",", "")]
+    print(f"── {style} · {len(out)}자 · {counter(out)} 토큰 · "
+          f"{'캐시' if meta['cached'] else '호출'} ──")
+    print(out)
+    print(f"   남은 정답 문자열 {kept} / {c.must_include}\\n")'''),
+
+        md(ALL_CONFIGS_MD.format(n=4, lab="03-summarize-llm") + """
+| 설정 | 코퍼스 | 무엇을 보려고 |
+|---|---|---|
+| `plain` | 장문 8건 | **대조군** — 지시 없이 요약하면 |
+| `question-aware` | 장문 8건 | 질문을 알려주면 |
+| `preserve` | 장문 8건 | 지킬 것을 못 박으면 |
+| `plain-short` | 산문 12건 | 짧고 숫자가 밀집한 입력 |
+| `preserve-short` | 산문 12건 | 같은 입력에 지시를 주면 |
+
+**먼저 예상 호출 수를 셉니다.** 캐시에 있으면 0회입니다.
+"""),
+        code('''
+plan = []
+for p in sorted(Path("configs").glob("*.yaml")):
+    cfg = C.load(p)
+    cs = dataset.load(cfg.dataset["path"], limit=cfg.dataset.get("limit"))
+    s = Summarizer(DEPLOY, style=cfg.params["style"],
+                   target_ratio=float(cfg.params["target_ratio"]))
+    need = sum(1 for x in cs if not s.cached(x.text, x.question or ""))
+    plan.append([cfg.name, Path(cfg.dataset["path"]).name, len(cs), need])
+
+table(["설정", "코퍼스", "케이스", "예상 호출"], plan,
+      align=["left", "left", "right", "right"],
+      title="비용 예상", note="캐시에 있으면 0회입니다. 합계를 보고 진행하세요.")
+print(f"합계 {sum(r[3] for r in plan)}회 — 캐시가 있으면 0 입니다.")'''),
+
+        code('''
+def run_config(path):
+    cfg = C.load(path)
+    cs = dataset.load(cfg.dataset["path"], limit=cfg.dataset.get("limit"))
+    cnt = T.make_counter(cfg.tokenizer, cfg.model)
+    smr = Summarizer(DEPLOY, style=cfg.params["style"],
+                     target_ratio=float(cfg.params["target_ratio"]),
+                     max_calls=int(cfg.params.get("max_calls", 200)),
+                     max_output_tokens=int(cfg.params.get("max_output_tokens", 2048)))
+
+    run = Run(cfg, RUNS)
+    try:
+        for x in cs:
+            after, extra = compress(x.text, question=x.question or "",
+                                    summarizer=smr)
+            run.add(metrics.per_case(x.id, x.kind, x.text, after,
+                                     x.must_include, cnt, extra),
+                    before=x.text, after=after)
+    finally:
+        smr.save()
+
+    m = metrics.aggregate(run.records, cnt)
+    m.update(smr.stats())
+    m["dataset_name"] = Path(cfg.dataset["path"]).name
+    m["style"] = smr.style
+    return cfg, m, run.finish(m, ["요약은 되돌릴 수 없습니다."])
+
+
+results = []
+for p in sorted(Path("configs").glob("*.yaml")):
+    cfg, m, out = run_config(p)
+    results.append((cfg.name, m, out))
+    print(f\'{cfg.name:18s} 절감 {m["saved"]:6.1%} · \'
+          f\'평균 보존율 {m["survival_mean"]:6.1%} · \'
+          f\'최저 {m["survival_worst"]:6.1%} · \'
+          f\'호출 {m["summary_calls"]}회\')'''),
+
+        md(COMPARE_MD.format(n=5) + """
+**절감률만 보면 `plain` 이 멀쩡해 보입니다.** 최저 보존율을 함께 봐야
+무슨 일이 벌어졌는지 보입니다.
+"""),
+        code('''
+table(
+    ["설정", "코퍼스", "스타일", "절감", "평균 보존율", "최저 보존율", "온전한 케이스"],
+    [[n, m["dataset_name"], m["style"], pct(m["saved"]),
+      pct(m["survival_mean"]), pct(m["survival_worst"]),
+      pct(m["survived_all_rate"])] for n, m, _ in results],
+    align=["left", "left", "left", "right", "right", "right", "right"],
+    title="조건 비교",
+    note="절감이 커도 최저 보존율이 0% 면 그 질문에는 답할 수 없습니다.",
+)
+
+by = {n: m for n, m, _ in results}
+if "plain" in by and "question-aware" in by:
+    a, b = by["plain"], by["question-aware"]
+    print(f\'장문: 질문을 알려주면 절감 {a["saved"]:.1%} → {b["saved"]:.1%}, \'
+          f\'최저 보존율 {a["survival_worst"]:.1%} → {b["survival_worst"]:.1%}\')
+    print("무엇을 남길지 판단할 근거가 생기면 나머지를 과감히 버릴 수 있습니다.")
+if "plain-short" in by and "preserve-short" in by:
+    a, b = by["plain-short"], by["preserve-short"]
+    print(f\'\\\n산문: 지시를 주면 절감 {a["saved"]:.1%} → {b["saved"]:.1%}, \'
+          f\'평균 보존율 {a["survival_mean"]:.1%} → {b["survival_mean"]:.1%}\')
+    print("**더 줄이면서 더 지켰습니다.** 압축률과 보존율이 꼭 상충하지는 않습니다.")'''),
+
+        md("""
+## 6. 무엇이 사라졌나 — 실패를 눈으로
+
+숫자만 보면 "보존율 33%" 가 무슨 뜻인지 안 와닿습니다. 실제 요약문을 봅니다.
+"""),
+        code('''
+import json
+
+worst_name = min(results, key=lambda r: r[1]["survival_worst"])[0]
+d = dict((n, o) for n, _, o in results)[worst_name]
+recs = [json.loads(l) for l in
+        (d / "records.jsonl").read_text(encoding="utf-8").splitlines()]
+
+# must_include 는 지표 레코드에 없습니다. 코퍼스에서 가져옵니다.
+cfg_w = C.load(f"configs/{worst_name}.yaml")
+want = {x.id: x.must_include
+        for x in dataset.load(cfg_w.dataset["path"],
+                              limit=cfg_w.dataset.get("limit"))}
+
+broken = [r for r in recs if r["survival"] == 0.0][:4]
+print(f"── {worst_name} 에서 보존율 0% 인 케이스 ──\\n")
+for r in broken:
+    print(f"[{r['id']} · {r['kind']}]")
+    print(f"  원문   : {r['before'][:80]}…")
+    print(f"  요약   : {r['after'][:100]}")
+    print(f"  사라진 것: {want.get(r['id'], [])}\\n")
+
+print("식별자와 금액이 '몇 건', '약 얼마' 같은 표현으로 녹아 없어집니다.")
+print("문장은 매끄러워서 읽어서는 티가 안 납니다 — 그래서 더 위험합니다.")'''),
+
+        md("""
+## 7. 유형별 — 어디가 먼저 무너지나
+"""),
+        code('''
+short = [(n, m) for n, m, _ in results if m["dataset_name"] == "sample"]
+if len(short) == 2:
+    (na, ma), (nb, mb) = short
+    kinds = sorted(set(ma["by_kind"]) | set(mb["by_kind"]))
+    table(
+        ["유형", f"{na} 최저", f"{nb} 최저", "무슨 일이"],
+        [[k,
+          pct(ma["by_kind"].get(k, {}).get("survival_worst")),
+          pct(mb["by_kind"].get(k, {}).get("survival_worst")),
+          {"structured": "표·JSON 이 서술로 바뀌면 끝입니다",
+           "identifier": "코드·번호가 '몇 건' 으로 뭉개집니다",
+           "similar": "비슷한 항목이 하나로 합쳐집니다",
+           "negation": "부정어는 지시해도 잘 안 지켜집니다",
+           "numeric": "지시하면 잘 지킵니다",
+           "short": "짧으면 요약할 것도 없습니다"}.get(k, "")]
+         for k in kinds],
+        align=["left", "right", "right", "left"],
+        title="유형별 최저 보존율",
+        note="부정이 뒤집히면 답이 정반대가 됩니다. 가장 위험한 유형입니다.",
+    )'''),
+
+        md("""
+## 8. 이 지표가 못 보는 것
+
+보존율은 **문자열 일치**로 잽니다. LLM 호출이 없어 스윕이 공짜라는 장점이
+있지만 대가가 있습니다.
+
+```
+원문   주말 및 공휴일에는 접수되지 않습니다      must_include: ["않습니다"]
+요약   주말·공휴일 제외                        → 보존율 0%
+```
+
+**뜻은 지켜졌는데 0% 로 셉니다.** 반대로 숫자를 그대로 베끼되 문맥을 뒤집는
+요약은 100% 로 셉니다.
+
+즉 이 지표는 **하한**입니다 — 낮으면 확실히 문제지만, 높다고 안전하다는
+뜻은 아닙니다. 의미 수준 평가는 `agentic-eval` 축의 일입니다.
+"""),
+
+        md("""
+## 정리
+
+- **요약은 되돌릴 수 없습니다** — 보존율이 곧 그 조건의 상한입니다
+- **프롬프트가 알고리즘보다 중요합니다** — 지시만 바꿔 33.3% → 88.9%
+- **압축률과 보존율은 꼭 상충하지 않습니다** — 무엇을 버려도 되는지 알면 둘 다 좋아집니다
+- **식별자·부정어가 먼저 죽습니다** — 문장이 매끄러워서 티가 안 납니다
+- **표·JSON 은 요약하지 마세요** — [`01`](../01-lossless-structure/run.ipynb) 이 무손실로 처리합니다
+
+### 다음 랩
+
+`04-llmlingua` — 모델 호출 없이 토큰 단위로 쳐냅니다.
+"""),
+    ])
+
+
 BUILDERS = {"00": ("00-baseline", nb_00),
             "01": ("01-lossless-structure", nb_01),
-            "02": ("02-handle-ref", nb_02)}
+            "02": ("02-handle-ref", nb_02),
+            "03": ("03-summarize-llm", nb_03)}
 
 
 def main(argv: list) -> int:
