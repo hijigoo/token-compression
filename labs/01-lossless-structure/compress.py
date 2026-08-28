@@ -199,8 +199,9 @@ def main() -> int:
         notes.append(f"적용된 {n_checked}개 단계를 전부 검증했습니다. "
                      f"되돌리거나 정규형을 비교해 원본과 같음을 확인했습니다.")
     if untouched:
-        notes.append(f"{untouched}건은 적용할 변환이 없어 그대로 통과했습니다. "
-                     f"무손실 압축은 표현의 중복을 먹으므로 산문에서는 할 일이 없습니다.")
+        notes.append(f"{untouched}건은 적용할 변환이 없어 원문 그대로 나갔습니다. "
+                     f"무손실 압축은 표현의 중복을 먹고 사는데, 산문에는 그 중복이 "
+                     f"없어서 손댈 곳이 없습니다.")
     notes.append(f"적용 횟수: {applied_count or '없음'}")
 
     out = run.finish(m, notes)
@@ -209,7 +210,8 @@ def main() -> int:
     print(f"정답 보존율 평균 {m['survival_mean']:.1%} · 최저 {m['survival_worst']:.1%}")
     print(f"검증 {n_checked}단계 통과" +
           (f" · {n_unchecked}단계 검증 불가" if n_unchecked else ""))
-    print(f"손 안 댄 케이스 {untouched}건")
+    if untouched:
+        print(f"압축 못 한 케이스 {untouched}/{len(cases)}건 — 적용할 변환이 없었습니다")
     print(f"\n결과 {out}")
 
     if problems:

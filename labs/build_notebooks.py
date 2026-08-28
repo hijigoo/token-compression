@@ -60,6 +60,15 @@ LABS = LAB.parents[0]                  # labs/<이 랩> -> labs
 sys.path.insert(0, str(LABS))
 sys.path.insert(0, str(LAB))           # 이 랩의 모듈(transforms, blocks 등)
 
+# 노트북을 켜 둔 채로 저장소를 갱신하면 커널이 **예전 코드를 물고 있습니다.**
+# 그러면 새로 생긴 함수가 없다는 에러(AttributeError)가 나는데, 원인이 코드가
+# 아니라 커널이라 찾기가 어렵습니다. 그래서 이 셀을 돌릴 때마다 새로 읽습니다.
+_stale = [m for m in list(sys.modules)
+          if m == "kit" or m.startswith("kit.")
+          or m in ("transforms", "blocks", "summarize", "compress")]
+for _m in _stale:
+    del sys.modules[_m]
+
 from kit import VERSION, config as C, dataset, env, metrics, tokens as T
 from kit.display import table, pct
 from kit.runner import Run
@@ -69,6 +78,8 @@ env.load(verbose=True)
 
 RUNS = LABS.parent / "runs"
 print("kit", VERSION, "· 랩", LAB.name)
+if _stale:
+    print(f"모듈 {len(_stale)}개를 새로 읽었습니다 — 커널에 남아 있던 예전 코드를 지웠습니다")
 '''
 
 ALL_CONFIGS_MD = '''
@@ -662,7 +673,7 @@ for p in sorted(Path("configs").glob("*.yaml")):
     results.append((cfg.name, m, out))
     flag = " ← 검증 불가 포함" if m["steps_unverified"] else ""
     print(f'{cfg.name:22s} 절감 {m["saved"]:6.1%} · '
-          f'검증 {m["steps_verified"]:2d}단계 · 손 안 댐 {m["untouched"]:2d}건{flag}')'''),
+          f'검증 {m["steps_verified"]:2d}단계 · 압축 못 함 {m["untouched"]:2d}건{flag}')'''),
 
         md(COMPARE_MD.format(n=6) + '''
 **여기서 읽어야 할 것 두 가지입니다.**
@@ -673,7 +684,7 @@ for p in sorted(Path("configs").glob("*.yaml")):
 '''),
         code('''
 table(
-    ["설정", "코퍼스", "절감", "최저 보존율", "검증", "검증 불가", "손 안 댐"],
+    ["설정", "코퍼스", "절감", "최저 보존율", "검증", "검증 불가", "압축 못 함"],
     [[n, m["dataset_name"], pct(m["saved"]), pct(m.get("survival_worst")),
       f'{m["steps_verified"]}단계',
       f'{m["steps_unverified"]}단계' if m["steps_unverified"] else "없음",
@@ -681,7 +692,9 @@ table(
      for n, m, _ in results],
     align=["left", "left", "right", "right", "right", "right", "right"],
     title="조건 비교",
-    note="검증 불가 단계가 하나라도 있으면 그 조건의 결과는 무손실이 아닙니다.",
+    note="'압축 못 함' 은 적용할 변환이 하나도 없어서 원문 그대로 나간 케이스입니다. "
+         "산문이 대부분 여기 해당합니다. "
+         "'검증 불가' 단계가 하나라도 있으면 그 조건은 무손실이 아닙니다.",
 )
 
 for n, m, _ in results:
