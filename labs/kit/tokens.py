@@ -12,6 +12,8 @@
 
 from __future__ import annotations
 
+import os
+
 import re
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
@@ -102,33 +104,151 @@ class LocalCounter:
         return f"로컬 계산 ({self.backend}) — API 호출 없음"
 
 
+class DualCounter:
+    """API 실측을 기준값으로 쓰되, tiktoken 추정도 함께 재서 차이를 남깁니다.
+
+    이 저장소의 **기본 측정 방식**입니다. 이유는 두 가지입니다.
+
+      1. 과금 기준은 API 응답의 usage 입니다. 그 값을 기준으로 삼아야
+         "얼마나 아꼈다" 가 실제 청구서와 맞습니다.
+      2. 그렇다고 tiktoken 을 버리면, 추정이 얼마나 어긋나는지 알 수 없습니다.
+         둘을 같이 재두면 나중에 "추정만으로 충분한가" 를 판단할 수 있습니다.
+
+    ## 자격증명이 없으면
+
+    로컬 계산으로 조용히 내려갑니다. 대신 **왜 내려갔는지 반드시 알려줍니다.**
+    말없이 다른 방식으로 재면 과거 결과와 비교가 깨지기 때문입니다.
+
+    ## 중간에 API 가 끊기면
+
+    예외를 냅니다. 앞쪽은 실측, 뒤쪽은 추정으로 재면 한 실행 안에서 측정
+    방식이 섞여서 합계가 아무 뜻도 없어집니다. 조용히 이어가는 것보다
+    멈추는 편이 낫습니다.
+    """
+
+    def __init__(self, model: Optional[str] = None, deployment: Optional[str] = None,
+                 cache: bool = True, refresh: bool = False,
+                 endpoint: Optional[str] = None):
+        self.local = LocalCounter(model)
+        self.api = None
+        self.fallback_reason: Optional[str] = None
+        self._l_total = self._a_total = self._n = 0
+
+        try:
+            from .provider import ApiCounter
+            api = ApiCounter(deployment=deployment or model or "",
+                             endpoint=endpoint, cache=cache, refresh=refresh)
+            # 실제로 되는지 짧은 문자열로 한 번 확인합니다. 여기서 걸러야
+            # 실행 도중에 절반만 실측되는 일이 안 생깁니다.
+            api("ping")
+            self.api = api
+        except Exception as e:
+            self.fallback_reason = f"{type(e).__name__}: {str(e).splitlines()[0][:120]}"
+
+    @property
+    def preloaded(self) -> int:
+        return getattr(self.api, "preloaded", 0)
+
+    @property
+    def backend(self) -> str:
+        if self.api is None:
+            return self.local.backend
+        return f"{self.api.backend}+{self.local.backend}"
+
+    def __call__(self, text: str, model: Optional[str] = None) -> int:
+        lv = self.local(text)
+        if self.api is None:
+            return lv
+        try:
+            av = self.api(text)
+        except Exception as e:
+            raise RuntimeError(
+                f"실행 도중 API 측정이 끊겼습니다 — {type(e).__name__}: {e}\n"
+                f"  여기서 로컬 계산으로 이어가면 앞쪽은 실측, 뒤쪽은 추정이 되어\n"
+                f"  합계가 아무 뜻도 없어집니다. 그래서 멈춥니다.\n"
+                f"  네트워크 없이 돌리시려면 tokenizer.mode 를 local 로 바꿔주세요."
+            ) from e
+        self._l_total += lv
+        self._a_total += av
+        self._n += 1
+        return av
+
+    @property
+    def gap_pp(self) -> Optional[float]:
+        """같은 텍스트를 두 방식으로 쟀을 때 몇 % 어긋났는지."""
+        if not self._l_total or self.api is None:
+            return None
+        return round((self._a_total - self._l_total) / self._l_total * 100, 2)
+
+    def save(self) -> None:
+        if self.api is not None:
+            self.api.save()
+
+    def stats(self) -> Dict[str, Any]:
+        if self.api is None:
+            return {"mode": "local-fallback", "reason": self.fallback_reason or ""}
+        s = dict(self.api.stats())
+        s.update({"mode": "both", "local_total": self._l_total,
+                  "api_total": self._a_total, "gap_pct": self.gap_pp})
+        return s
+
+    def describe(self) -> str:
+        if self.api is None:
+            return (f"tiktoken 추정만 사용 — API 를 쓸 수 없습니다 "
+                    f"({self.fallback_reason}). 과금 기준과 다를 수 있습니다")
+        gap = self.gap_pp
+        gap_txt = "" if gap is None else f" · 추정과 {gap:+.1f}% 차이"
+        return f"API 실측 기준 + tiktoken 추정 병행{gap_txt} · {self.api.describe()}"
+
+
 def make_counter(spec: Optional[Dict[str, Any]] = None, model: Optional[str] = None):
     """설정에 따라 토큰 카운터를 만듭니다.
 
         tokenizer:
-          mode: local            # local | api
-          deployment: gpt-5.4    # mode=api 일 때 배포명
+          mode: both             # both(기본) | api | local
+          deployment: gpt-5.4    # 비우면 .env 의 AZURE_OPENAI_DEPLOYMENT
           cache: true            # 같은 텍스트는 한 번만 호출
+          refresh: false         # true 면 캐시를 무시하고 다시 부릅니다
 
-    mode 를 생략하면 local 입니다. api 는 정확하지만 텍스트마다 호출이 붙습니다.
+    ## 어느 것을 고를까요
+
+    | mode | 기준값 | 언제 |
+    |---|---|---|
+    | `both` | API 실측 | **기본값.** 과금 기준으로 재면서 추정 오차도 같이 봅니다 |
+    | `api` | API 실측 | 과금 값만 필요하고 tiktoken 계산을 아끼고 싶을 때 |
+    | `local` | tiktoken | 네트워크·자격증명 없이, 또는 호출을 아예 막고 싶을 때 |
+
+    `both` 는 자격증명이 없으면 로컬로 내려가되 **이유를 알려줍니다.**
+    `api` 는 같은 상황에서 예외를 냅니다 — 반드시 실측이 필요하다고
+    선언한 것이므로 조용히 다른 값을 주면 안 되기 때문입니다.
     """
     spec = dict(spec or {})
-    mode = (spec.get("mode") or "local").lower()
+    mode = (spec.get("mode") or "both").lower()
+    deployment = spec.get("deployment") or os.environ.get("AZURE_OPENAI_DEPLOYMENT")
 
     if mode == "local":
         return LocalCounter(model)
 
+    if mode == "both":
+        return DualCounter(
+            model=model,
+            deployment=deployment or model,
+            endpoint=spec.get("endpoint"),
+            cache=spec.get("cache", True),
+            refresh=spec.get("refresh", False),
+        )
+
     if mode == "api":
         from .provider import ApiCounter
         return ApiCounter(
-            deployment=spec.get("deployment") or model or "",
+            deployment=deployment or model or "",
             endpoint=spec.get("endpoint"),
             cache=spec.get("cache", True),
             api_version=spec.get("api_version", "preview"),
             refresh=spec.get("refresh", False),
         )
 
-    raise ValueError(f"알 수 없는 tokenizer.mode: {mode} (local | api)")
+    raise ValueError(f"알 수 없는 tokenizer.mode: {mode} (both | api | local)")
 
 
 def _get(obj: Any, *names: str) -> Any:

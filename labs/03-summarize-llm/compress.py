@@ -70,6 +70,9 @@ def main() -> int:
     ap.add_argument("config", help="configs/*.yaml")
     ap.add_argument("--data")
     ap.add_argument("--limit", type=int)
+    ap.add_argument("--tokenizer", choices=["both", "api", "local"],
+                    help="토큰 측정 방식 (config 값을 덮어씁니다). "
+                         "both=실측+추정 · api=실측만 · local=추정만")
     ap.add_argument("--refresh-tokens", action="store_true",
                     help="토큰 캐시를 무시하고 API 를 다시 부릅니다 (mode: api 일 때)")
     ap.add_argument("--out", default=str(LABS.parent / "runs"))
@@ -86,6 +89,8 @@ def main() -> int:
     cases = dataset.load(path, limit=limit)
     info = dataset.summarize(cases)
     tok_spec = dict(cfg.tokenizer)
+    if args.tokenizer:
+        tok_spec["mode"] = args.tokenizer
     if args.refresh_tokens:
         tok_spec["refresh"] = True
     counter = T.make_counter(tok_spec, cfg.model)

@@ -1,0 +1,13 @@
+# tiktoken 만 씁니다. 네트워크도 자격증명도 필요 없습니다.
+# 호출을 아예 막고 싶거나 오프라인에서 돌리실 때 쓰세요.
+name: noop-local
+lab: 00-baseline
+
+dataset:
+  path: ../../data/sample
+
+model: gpt-5.4
+params: {}
+
+tokenizer:
+  mode: local

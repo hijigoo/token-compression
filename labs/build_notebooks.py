@@ -100,6 +100,78 @@ COMPARE_MD = '''
 '''
 
 
+# ══════════════════════════════════════════════════════════════════
+# 과금 검증 — 노트북 4개가 공유합니다
+#
+# tiktoken 은 추정입니다. 실제로 돈이 나가는 기준은 API 응답의
+# usage.input_tokens 입니다. "줄었다" 를 추정으로만 말하지 않으려고
+# 랩마다 몇 건을 실제로 불러서 두 숫자를 나란히 놓습니다.
+# ══════════════════════════════════════════════════════════════════
+
+BILLED_MD = '''
+## {n}. 진짜로 줄었나 — API 응답으로 확인하기
+
+여기까지의 절감률은 전부 **tiktoken 추정치**입니다. 실제로 청구되는 값은
+API 응답의 `usage.input_tokens` 이고, 둘이 항상 같지는 않습니다.
+
+| 왜 어긋나나 | 얼마나 |
+|---|---|
+| 메시지 포맷 오버헤드 (역할 구분자 등) | 텍스트당 상수 (실측 +6) |
+| 배포 모델의 토크나이저가 tiktoken 과 다를 수 있음 | 모델마다 |
+| 압축 결과의 특수 문자를 모델이 어떻게 쪼개는지 | **해봐야 압니다** |
+
+마지막 줄이 중요합니다. {why}
+
+그래서 몇 건만 뽑아 **압축 전과 후를 각각 실제로 보내보고**, 응답이 알려주는
+토큰 수로 절감률을 다시 계산합니다. 호출은 케이스당 2회이고 캐시됩니다.
+'''
+
+BILLED_CODE = '''
+from kit import verify
+
+DEPLOY = env.get("AZURE_OPENAI_DEPLOYMENT")
+
+try:
+{setup}
+    r = verify.billed(pairs, deployment=DEPLOY, model=DEPLOY, limit=3)
+    t = r["totals"]
+
+    table(
+        ["케이스", "tiktoken 전→후", "API 실측 전→후", "추정 절감", "실측 절감"],
+        [[x["id"],
+          f'{{x["local_before"]:,}} → {{x["local_after"]:,}}',
+          f'{{x["api_before"]:,}} → {{x["api_after"]:,}}',
+          pct(x["local_saved"]), pct(x["api_saved"])]
+         for x in r["rows"]],
+        foot=["합계",
+              f'{{t["local_before"]:,}} → {{t["local_after"]:,}}',
+              f'{{t["api_before"]:,}} → {{t["api_after"]:,}}',
+              pct(t["local_saved"]), pct(t["api_saved"])],
+        align=["left", "right", "right", "right", "right"],
+        title=f'과금 기준으로 다시 재기 ({{t["n"]}}건)',
+        note="'API 실측' 은 응답의 usage.input_tokens 를 그대로 읽은 값입니다.",
+    )
+
+    print(verify.verdict(t))
+    print(f'텍스트당 오버헤드 {{t["overhead_per_text"]:+.1f}} 토큰 — '
+          f'역할 구분자 같은 프레이밍이라 길이와 무관하게 붙습니다.')
+    print(r["counter"].describe())
+except Exception as e:
+    print(f"과금 검증을 건너뜁니다 — {{type(e).__name__}}: {{str(e)[:160]}}")
+    print("\\\\n자격증명이 있으면 아래로 준비하실 수 있습니다.")
+    print("  cd labs && cp .env.example .env")
+    print("없어도 위까지의 결과는 전부 유효합니다. 다만 추정치입니다.")
+'''
+
+
+def billed_cells(n: int, why: str, setup: str) -> list:
+    """setup 은 `pairs` 를 만드는 코드 조각입니다 (들여쓰기 4칸으로 들어갑니다)."""
+    body = "\n".join("    " + ln if ln.strip() else ln
+                     for ln in setup.strip("\n").splitlines())
+    return [md(BILLED_MD.format(n=n, why=why)),
+            code(BILLED_CODE.format(setup=body))]
+
+
 def config_table_cell(extra_cols: str = "", extra_vals: str = "") -> str:
     return f'''
 rows = []
@@ -169,31 +241,52 @@ table(
         md('''
 ## 3. 토큰을 어떻게 셀 것인가
 
-**두 가지 방식이 있고 설정으로 고릅니다.**
+**세 가지 중에 고르실 수 있고, 기본값은 `both` 입니다.**
 
-| | `local` | `api` |
-|---|---|---|
-| 방법 | tiktoken (없으면 문자 근사) | 모델을 호출해 `usage.input_tokens` |
-| 비용 | 0 | 텍스트마다 호출 1회 |
-| 정확도 | 근사 | **과금 기준 그대로** |
-| 포함되는 것 | 텍스트만 | 텍스트 + **메시지 포맷 오버헤드** |
+| mode | 기준값 | 호출 | 언제 쓰나요 |
+|---|---|---|---|
+| **`both`** (기본) | API 실측 | 텍스트당 1회 | 과금 기준으로 재면서 추정 오차도 같이 봅니다 |
+| `api` | API 실측 | 텍스트당 1회 | 실측만 필요할 때 |
+| `local` | tiktoken | 없음 | 네트워크·자격증명 없이 돌릴 때 |
+
+`both` 가 기본인 이유는, **실제로 돈이 나가는 기준은 API 응답의
+`usage.input_tokens`** 이기 때문입니다. 그렇다고 tiktoken 을 버리면 추정이
+얼마나 어긋나는지 알 수 없어서, 둘을 같이 재고 차이를 남깁니다.
 
 ```yaml
 tokenizer:
-  mode: api            # local | api
-  deployment: gpt-5.4  # 생략하면 AZURE_OPENAI_DEPLOYMENT
+  mode: both           # both | api | local
+  deployment:          # 비우면 .env 의 AZURE_OPENAI_DEPLOYMENT
   cache: true          # 같은 텍스트는 한 번만 호출
 ```
 
-**`api` 는 캐시가 필수입니다.** 케이스 N건이면 압축 전후로 2N 회를 부르고,
-스윕을 10단계 돌리면 그만큼 곱해집니다. 결과는 `kit/.cache/` 에 남습니다.
+명령줄에서 덮어쓰실 수도 있습니다.
+
+```bash
+python compress.py configs/noop.yaml --tokenizer local
+```
+
+**자격증명이 없으면** `both` 는 로컬 계산으로 내려가되 왜 그랬는지 알려줍니다.
+`api` 는 같은 상황에서 예외를 냅니다 — 실측이 꼭 필요하다고 선언한 것이라
+조용히 다른 값을 드리면 안 되기 때문입니다.
+
+**`api` 를 쓰실 때 캐시를 끄지 말아주세요.** 케이스 N건이면 압축 전후로
+2N 회를 부르고, 스윕을 10단계 돌리면 그만큼 곱해집니다. 결과는
+`kit/.cache/` 에 남아 다음 실행부터 재사용됩니다.
 
 > **주의** — `api` 값에는 메시지 포맷 오버헤드가 포함됩니다(실측 +6).
 > 압축 전후를 같은 방식으로 재므로 **비율 비교는 안전하지만**,
 > `local` 값과 나란히 놓으면 안 됩니다. 그래서 `token_backend` 를 기록합니다.
 '''),
         code('''
-counter = T.make_counter(cfg.tokenizer, cfg.model)
+# 여기서 방식을 바꿔 보실 수 있습니다. None 이면 config 값을 씁니다.
+MODE = None          # None | "both" | "api" | "local"
+
+spec = dict(cfg.tokenizer)
+if MODE:
+    spec["mode"] = MODE
+
+counter = T.make_counter(spec, cfg.model)
 print("측정 방식:", counter.backend)
 print("설명    :", counter.describe())
 
@@ -410,6 +503,13 @@ if len(results) == 2:
     diff = abs(a["tokens_before"] - b["tokens_before"])
     print(f"측정 방식 차이: {diff:,} 토큰 ({diff / max(a["n"], 1):.1f}/건)")
     print("케이스당 +6 이면 메시지 포맷 오버헤드입니다 — 텍스트가 아니라 프레이밍입니다.")'''),
+
+        *billed_cells(
+            10,
+            "이 랩은 압축을 안 하므로 **양쪽 다 0% 가 나와야 정상**입니다. "
+            "여기서 0% 가 아니면 측정 경로 어딘가가 원문을 바꾸고 있다는 뜻입니다.",
+            "pairs = [(c.id, c.text, compress(c.text, **cfg.params)[0])\n"
+            "         for c in cases]"),
 
         md('''
 ## 정리
@@ -779,6 +879,14 @@ table(
 
 print("적용 횟수:", m["applied_count"])'''),
 
+        *billed_cells(
+            8,
+            "이 랩은 표 구분자로 **제어문자**를 씁니다. 그런 글자를 모델 "
+            "토크나이저가 어떻게 쪼개는지는 tiktoken 추정으로는 알 수 없습니다.",
+            "scfg = C.load('configs/structure.yaml')\n"
+            "pairs = [(c.id, c.text, compress(c.text, **scfg.params)[0])\n"
+            "         for c in dataset.load(scfg.dataset['path'])]"),
+
         md('''
 ## 정리
 
@@ -1047,6 +1155,15 @@ print(f"문서당 원문 {full:,.0f} · 다이제스트 {digest:,.0f} · 블록 
 print("이 코퍼스는 문서가 800자대로 짧은 편입니다.")
 print("실제 장문(수천~수만 토큰)에서는 다이제스트 비중이 훨씬 작아 이득이 큽니다.")'''),
 
+        *billed_cells(
+            9,
+            "이 랩의 압축 결과에는 `[[b2]]` 같은 **핸들 표시**가 섞입니다. "
+            "대괄호가 몇 토큰으로 쪼개지는지는 실제로 불러봐야 압니다.",
+            "kcfg = C.load('configs/k1.yaml')\n"
+            "pairs = [(c.id, c.text,\n"
+            "          compress(c.text, question=c.question or '', **kcfg.params)[0])\n"
+            "         for c in cases]"),
+
         md('''
 ## 정리
 
@@ -1313,6 +1430,15 @@ if len(short) == 2:
 즉 이 지표는 **하한**입니다 — 낮으면 확실히 문제지만, 높다고 안전하다는
 뜻은 아닙니다. 의미 수준 평가는 `agentic-eval` 축의 일입니다.
 """),
+
+        *billed_cells(
+            9,
+            "요약문은 원문과 문체가 다릅니다. 짧아졌다고 토큰이 비례해서 "
+            "줄지는 않으므로, 과금 기준으로 다시 재보는 편이 안전합니다.",
+            "out_dir = dict((n, o) for n, _, o in results)['preserve']\n"
+            "recs = [json.loads(l) for l in\n"
+            "        (out_dir / 'records.jsonl').read_text(encoding='utf-8').splitlines()]\n"
+            "pairs = [(x['id'], x['before'], x['after']) for x in recs]"),
 
         md("""
 ## 정리

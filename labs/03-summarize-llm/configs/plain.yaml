@@ -15,4 +15,8 @@ params:
   max_output_tokens: 2048 # 추론 모델은 생각하는 데도 출력 토큰을 씁니다
 
 tokenizer:
-  mode: local
+  mode: both            # both(기본) | api | local
+                        #   both  — API 실측을 기준으로 쓰고 tiktoken 추정도 함께 잽니다
+                        #   api   — 실측만. 자격증명이 없으면 실패합니다
+                        #   local — tiktoken 만. 네트워크를 쓰지 않습니다
+  cache: true           # 같은 텍스트는 한 번만 호출합니다
