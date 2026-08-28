@@ -1,0 +1,12 @@
+# 압축 없음 — 기준선이자 하네스 점검
+name: noop
+lab: 00-baseline
+
+params: {}                    # 조정할 것이 없습니다
+
+dataset:
+  path: ../../data/sample     # config 파일 기준 상대경로
+  limit: null
+
+# 토큰 계산에 쓸 인코딩 기준입니다. API 를 부르지 않습니다.
+model: gpt-5.4

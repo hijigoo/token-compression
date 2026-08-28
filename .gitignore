@@ -91,6 +91,9 @@ labs/data/**
 !labs/data/**/manifest.json
 !labs/data/**/.gitkeep
 
+# sample/ 은 예외 — 합성 데이터이고 하네스 스모크 테스트에 필요합니다
+!labs/data/sample/**
+
 # ─────────────────────────────────────────────────────────────
 # DeepSWE 데이터셋 (labs/agentic-eval/)
 #   setup.sh 로 클론한다. 코퍼스가 아니라 Docker 실행 픽스처라
@@ -158,3 +161,9 @@ tmp/
 scratch/
 *.tmp
 *.log
+
+# --- labs ---
+labs/.env
+labs/kit/.cache/
+runs/
+labs/runs/

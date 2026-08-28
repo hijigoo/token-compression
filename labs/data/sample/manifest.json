@@ -1,0 +1,9 @@
+{
+  "name": "sample",
+  "source": "합성 데이터 (직접 작성)",
+  "revision": "v1",
+  "license": "내부용",
+  "n_samples": 12,
+  "added_at": "2026-08-28",
+  "note": "하네스 스모크 테스트 전용입니다. 실제 고객 데이터가 아니며 벤치마크로 쓰지 마세요. 12건뿐이라 통계적 의미가 없습니다. 유형: numeric·negation·identifier·similar·structured·short"
+}

@@ -20,9 +20,9 @@ docs-long/      →  docs-long-v2/     (기존은 그대로 둔다)
 
 | 폴더 | 용도 | 주 소비자 |
 |---|---|---|
-| `conversations/` | 멀티턴 대화 로그 | `05-summarize-llm`, `08-azure-compaction` |
-| `docs-long/` | 장문 문서 (RAG 컨텍스트) | `01-llmlingua`, `02-selective-context`, `06-recomp` |
-| `code/` | 소스 코드 파일 | `03-lossless-structure`, `04-handle-ref` |
+| `conversations/` | 멀티턴 대화 로그 | `03-summarize-llm` |
+| `docs-long/` | 장문 문서 | `04-llmlingua`, `05-headroom` |
+| `code/` | 소스 코드 파일 | `01-lossless-structure`, `02-handle-ref` |
 
 ## 코퍼스 추가 방법
 

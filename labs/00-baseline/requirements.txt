@@ -1,0 +1,2 @@
+# 이 랩은 추가 의존성이 없습니다. kit 것만 있으면 됩니다.
+#   uv pip install -r ../kit/requirements.txt

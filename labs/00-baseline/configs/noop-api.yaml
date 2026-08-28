@@ -1,0 +1,20 @@
+# 토큰을 실제 모델 호출로 재는 예시입니다.
+# 값이 과금 기준 그대로지만 텍스트마다 호출이 1회 발생합니다.
+#
+#   cd labs && cp .env.example .env      # 또는 cp ../scripts/explore/.env .env
+#   cd 00-baseline && python compress.py configs/noop-api.yaml
+
+name: noop-api
+lab: 00-baseline
+
+dataset:
+  path: ../../data/sample
+
+model: gpt-5.4
+params: {}
+
+tokenizer:
+  mode: api
+  # deployment 를 비우면 .env 의 AZURE_OPENAI_DEPLOYMENT 를 씁니다.
+  deployment:
+  cache: true          # 같은 텍스트는 한 번만 호출합니다. 끄지 마세요.
