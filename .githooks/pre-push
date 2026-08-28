@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# 푸시 직전 안전망 — 커밋된 노트북에 실행 결과가 남아 있으면 막습니다.
+#
+# clean filter(scripts/setup_git.sh) 가 걸려 있으면 여기까지 올 일이 없습니다.
+# 이 훅은 filter 설정을 빠뜨린 사람·환경을 위한 2차 방어선입니다.
+set -uo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+PY="$(command -v python3 || command -v python)"
+if [ -z "$PY" ]; then
+  echo "pre-push: python 을 찾지 못해 검사를 건너뜁니다." >&2
+  exit 0
+fi
+
+CHECKER="$ROOT/scripts/strip_outputs.py"
+if [ ! -f "$CHECKER" ]; then
+  echo "pre-push: $CHECKER 가 없어 검사를 건너뜁니다." >&2
+  exit 0
+fi
+
+ZERO="0000000000000000000000000000000000000000"
+bad=0
+
+while read -r _local_ref local_sha _remote_ref remote_sha; do
+  [ "$local_sha" = "$ZERO" ] && continue          # 브랜치 삭제
+
+  # ★ git ls-tree 는 pathspec 에 glob 을 적용하지 않습니다.
+  #   -- '*.ipynb' 를 붙이면 아무것도 안 잡혀 검사가 통째로 무력화됩니다.
+  #   그래서 전체 목록을 받아 grep 으로 거릅니다.
+  if [ "$remote_sha" = "$ZERO" ]; then            # 원격에 없던 새 브랜치
+    files="$(git ls-tree -r --name-only "$local_sha" | grep -E '\.ipynb$' || true)"
+  else
+    files="$(git diff --name-only "$remote_sha" "$local_sha" | grep -E '\.ipynb$' || true)"
+  fi
+  [ -z "$files" ] && continue
+
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    # 노트북 내용만 파이프로 넘깁니다.
+    # (파이썬 코드를 히어독으로 주면 파이프와 stdin 이 충돌해 검사가 무력화됩니다)
+    if ! git show "$local_sha:$f" 2>/dev/null | "$PY" "$CHECKER" --check-stdin "$f"; then
+      bad=1
+    fi
+  done <<< "$files"
+done
+
+if [ "$bad" -ne 0 ]; then
+  cat >&2 <<'MSG'
+
+푸시를 막았습니다 — 커밋된 노트북에 실행 결과가 남아 있습니다.
+출력에는 엔드포인트·응답 본문·리소스명이 박힐 수 있습니다.
+
+해결 방법
+  1) 출력을 지우고 다시 커밋합니다
+        python scripts/strip_outputs.py
+        git add -A && git commit --amend --no-edit
+
+  2) 앞으로 자동으로 처리되게 합니다 (권장, 한 번만)
+        bash scripts/setup_git.sh
+
+MSG
+  exit 1
+fi
+exit 0

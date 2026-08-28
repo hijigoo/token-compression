@@ -1,0 +1,7 @@
+# 노트북 실행에 필요한 것 — 가볍게 유지한다.
+#
+#   uv pip install --python ../../.venv/bin/python -r requirements.txt
+#
+# 사내망에서 files.pythonhosted.org 가 막히면 루트 uv.toml 의 국내 미러가 쓰인다.
+python-dotenv>=1.0     # .env 로 엔드포인트·자격증명 분리
+ipykernel>=6.29        # VS Code 노트북 커널

@@ -1,0 +1,4 @@
+# 사내망에서 files.pythonhosted.org 가 차단되어 국내 미러를 사용한다.
+[[index]]
+url = "https://mirror.kakao.com/pypi/simple"
+default = true

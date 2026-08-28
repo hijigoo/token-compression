@@ -1,0 +1,2292 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DeepSWE 동작 원리 — 한눈에 이해하기</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2430; --line:#2b3440;
+    --tx:#e6edf3; --tx2:#9aa7b4; --tx3:#6e7c8c;
+    --a1:#58a6ff; --a2:#7ee787; --a3:#ffa657; --a4:#d2a8ff; --a5:#ff7b72;
+    --radius:14px;
+  }
+  body.light{
+    --bg:#ffffff; --panel:#f6f8fa; --panel2:#eaeef2; --line:#d0d7de;
+    --tx:#1f2328; --tx2:#57606a; --tx3:#818b98;
+    --a1:#0969da; --a2:#1a7f37; --a3:#bc4c00; --a4:#8250df; --a5:#cf222e;
+  }
+  body.light header{
+    background:
+      radial-gradient(1000px 400px at 15% -10%, rgba(9,105,218,.16), transparent 60%),
+      radial-gradient(800px 400px at 85% 0%, rgba(130,80,223,.14), transparent 60%),
+      linear-gradient(180deg,#f2f6fb,#ffffff);
+  }
+  body.light .chip, body.light code{background:rgba(0,0,0,.05)}
+  body.light tbody tr:hover{background:rgba(0,0,0,.02)}
+  body.light .card:hover{border-color:#a8b3bf;box-shadow:0 4px 14px rgba(0,0,0,.06)}
+  body.light .num{color:#fff}
+  body.light pre{background:#0d1117;color:#e6edf3}
+
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--tx);
+    font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR",Segoe UI,sans-serif;
+    line-height:1.7; -webkit-font-smoothing:antialiased;
+  }
+  code,pre{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace}
+  code{background:rgba(255,255,255,.07);padding:.12em .42em;border-radius:5px;font-size:.87em}
+  pre{
+    background:#010409;border:1px solid var(--line);border-radius:10px;
+    padding:14px 16px;overflow-x:auto;font-size:.8rem;line-height:1.6;margin:12px 0;
+    color:#c9d1d9;
+  }
+  pre .c{color:#6e7c8c}     /* comment */
+  pre .g{color:#7ee787}     /* green / added */
+  pre .r{color:#ff7b72}     /* red / removed */
+  pre .b{color:#58a6ff}     /* blue */
+  pre .y{color:#ffa657}     /* orange */
+  pre .p{color:#d2a8ff}     /* purple */
+
+  #toggle{
+    position:fixed;top:16px;right:16px;z-index:99;cursor:pointer;
+    background:var(--panel);color:var(--tx);border:1px solid var(--line);
+    padding:8px 14px;border-radius:20px;
+    font-family:inherit;font-size:.83rem;font-weight:600;
+  }
+  #toggle:hover{border-color:var(--a1)}
+
+  header{
+    padding:76px 24px 60px;
+    background:
+      radial-gradient(1000px 400px at 15% -10%, rgba(88,166,255,.16), transparent 60%),
+      radial-gradient(800px 400px at 85% 0%, rgba(210,168,255,.13), transparent 60%),
+      linear-gradient(180deg,#111823,#0d1117);
+    border-bottom:1px solid var(--line);
+  }
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+  header h1{margin:0 0 14px;font-size:2.5rem;letter-spacing:-.02em;line-height:1.25}
+  header h1 span{color:var(--a1)}
+  .sub{color:var(--tx2);font-size:1.05rem;max-width:780px;margin:0}
+  .meta{margin-top:26px;display:flex;gap:26px;flex-wrap:wrap;font-size:.85rem;color:var(--tx3)}
+  .meta b{color:var(--tx2);font-weight:600}
+
+  section{padding:52px 0;border-bottom:1px solid var(--line)}
+  h2{
+    display:flex;align-items:center;gap:12px;
+    margin:0 0 8px;font-size:1.5rem;letter-spacing:-.01em;
+  }
+  .num{
+    display:inline-flex;align-items:center;justify-content:center;
+    width:30px;height:30px;border-radius:9px;flex:none;
+    font-size:.82rem;font-weight:700;color:var(--bg);background:var(--a1);
+  }
+  h3{margin:30px 0 10px;font-size:1.06rem;color:var(--tx)}
+  .lead{color:var(--tx2);margin:0 0 24px;font-size:.98rem}
+  p{color:var(--tx2);font-size:.94rem}
+
+  .grid{display:grid;gap:14px;margin:18px 0}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g4{grid-template-columns:repeat(4,1fr)}
+  @media(max-width:820px){.g2,.g3,.g4{grid-template-columns:1fr}}
+
+  .card{
+    background:var(--panel);border:1px solid var(--line);
+    border-radius:var(--radius);padding:18px 20px;transition:.15s;
+  }
+  .card:hover{border-color:#3d4a5c}
+  .card b{display:block;margin-bottom:6px;font-size:.95rem;color:var(--tx)}
+  .card p{margin:0;color:var(--tx2);font-size:.9rem}
+  .card ul{margin:8px 0 0;padding-left:18px;color:var(--tx2);font-size:.88rem}
+  .card li{margin:3px 0}
+
+  .kpi{text-align:center;padding:22px 14px}
+  .kpi .v{font-size:2rem;font-weight:700;letter-spacing:-.02em}
+  .kpi .l{font-size:.8rem;color:var(--tx3);margin-top:4px}
+
+  table{width:100%;border-collapse:collapse;margin:16px 0;font-size:.88rem}
+  th,td{padding:11px 13px;border:1px solid var(--line);text-align:left;vertical-align:top}
+  thead th{background:var(--panel2);color:var(--tx);font-weight:600;font-size:.82rem}
+  tbody tr:hover{background:rgba(255,255,255,.02)}
+  td code{font-size:.82em;white-space:nowrap}
+
+  .chip{
+    display:inline-block;padding:2px 9px;border-radius:999px;
+    font-size:.72rem;font-weight:700;border:1px solid var(--line);
+    background:rgba(128,128,128,.14);color:var(--tx2);
+  }
+  .c-ds{background:rgba(88,166,255,.16);border-color:rgba(88,166,255,.4);color:var(--a1)}
+  .c-ag{background:rgba(126,231,135,.14);border-color:rgba(126,231,135,.38);color:var(--a2)}
+  .c-hu{background:rgba(255,166,87,.15);border-color:rgba(255,166,87,.4);color:var(--a3)}
+  .c-pi{background:rgba(210,168,255,.15);border-color:rgba(210,168,255,.4);color:var(--a4)}
+  .c-no{background:rgba(255,123,114,.13);border-color:rgba(255,123,114,.38);color:var(--a5)}
+
+  .note{
+    border-left:3px solid var(--a3);background:rgba(255,166,87,.07);
+    padding:13px 18px;border-radius:0 10px 10px 0;font-size:.9rem;color:var(--tx2);
+    margin:16px 0;
+  }
+  .note b{color:var(--tx)}
+  .note.ok{border-color:var(--a2);background:rgba(126,231,135,.07)}
+  .note.bad{border-color:var(--a5);background:rgba(255,123,114,.07)}
+  .note.info{border-color:var(--a1);background:rgba(88,166,255,.07)}
+
+  .flow{display:flex;flex-direction:column;gap:0;margin:22px 0}
+  .frow{
+    display:grid;grid-template-columns:52px 1fr;gap:16px;align-items:stretch;
+  }
+  .fcol{display:flex;flex-direction:column;align-items:center}
+  .fdot{
+    width:34px;height:34px;border-radius:50%;flex:none;
+    display:flex;align-items:center;justify-content:center;
+    font-size:.82rem;font-weight:700;color:var(--bg);
+  }
+  .fline{width:2px;flex:1;background:var(--line);margin:4px 0}
+  .fbody{padding-bottom:22px;min-width:0}
+  .fbody h4{margin:4px 0 4px;font-size:1rem;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .fbody p{margin:0;font-size:.9rem;color:var(--tx2)}
+
+  .tri{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin:18px 0;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+  @media(max-width:820px){.tri{grid-template-columns:1fr}}
+  .tri > div{padding:18px 20px;border-right:1px solid var(--line)}
+  .tri > div:last-child{border-right:none}
+  @media(max-width:820px){.tri > div{border-right:none;border-bottom:1px solid var(--line)}}
+  .tri h4{margin:0 0 10px;font-size:.95rem;display:flex;align-items:center;gap:8px}
+  .tri ul{margin:0;padding-left:17px;font-size:.87rem;color:var(--tx2)}
+  .tri li{margin:5px 0}
+
+  .fileTree{
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:18px 20px;font-family:"SF Mono",ui-monospace,Menlo,monospace;
+    font-size:.83rem;line-height:2;color:var(--tx2);overflow-x:auto;
+  }
+  .fileTree b{color:var(--tx);font-weight:600}
+  .fileTree .lock{color:var(--a5)}
+  .fileTree .cm{color:var(--tx3);font-family:inherit}
+
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:820px){.split{grid-template-columns:1fr}}
+
+  .verdict{
+    display:flex;align-items:center;gap:14px;padding:16px 20px;
+    border:1px solid var(--line);border-radius:var(--radius);margin:10px 0;
+    background:var(--panel);
+  }
+  .verdict .score{
+    font-size:1.6rem;font-weight:800;width:52px;text-align:center;flex:none;
+  }
+  .verdict .why{font-size:.88rem;color:var(--tx2)}
+  .verdict .why b{color:var(--tx)}
+  .v-ok{border-left:4px solid var(--a2)}
+  .v-ok .score{color:var(--a2)}
+  .v-no{border-left:4px solid var(--a5)}
+  .v-no .score{color:var(--a5)}
+
+  footer{padding:44px 24px 70px;color:var(--tx3);font-size:.86rem}
+  footer a{color:var(--a1);text-decoration:none}
+  footer a:hover{text-decoration:underline}
+  ol.steps{padding-left:20px;color:var(--tx2);font-size:.92rem}
+  ol.steps li{margin:7px 0}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;margin:16px 0 4px;font-size:.85rem;color:var(--tx2);align-items:center}
+
+  /* --- tabs --- */
+  .tabbar{
+    position:sticky;top:0;z-index:50;
+    background:rgba(13,17,23,.86);backdrop-filter:blur(12px);
+    border-bottom:1px solid var(--line);
+  }
+  body.light .tabbar{background:rgba(255,255,255,.88)}
+  .tabbar .wrap{display:flex;gap:6px;padding-top:10px;padding-bottom:10px;flex-wrap:wrap}
+  .tab{
+    background:transparent;border:1px solid transparent;border-radius:10px;
+    padding:9px 18px;cursor:pointer;font-family:inherit;font-size:.92rem;font-weight:600;
+    color:var(--tx3);transition:.15s;
+  }
+  .tab:hover{color:var(--tx);background:var(--panel)}
+  .tab.on{color:var(--tx);background:var(--panel);border-color:var(--line)}
+  .tab.on::after{
+    content:"";display:block;height:2px;background:var(--a1);
+    border-radius:2px;margin-top:7px;
+  }
+  .pane{display:none}
+  .pane.on{display:block}
+
+  /* --- docker section --- */
+  .c-bake{color:var(--a3)}
+  .c-mnt{color:var(--a2)}
+  .c-cp{color:var(--a4)}
+  .fileTree .c-bake,.fileTree .c-mnt,.fileTree .c-cp{font-family:-apple-system,"Apple SD Gothic Neo",sans-serif;font-size:.9em}
+
+  .dockerline{
+    display:grid;grid-template-columns:1fr 168px 1fr;gap:0;align-items:center;margin:20px 0;
+  }
+  @media(max-width:820px){.dockerline{grid-template-columns:1fr}}
+  .dbox{
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:18px 20px;position:relative;
+  }
+  .dbox.d-work{border-left:4px solid var(--a2)}
+  .dbox.d-grade{border-left:4px solid var(--a1)}
+  .dbox .dtag{font-size:.72rem;font-weight:700;color:var(--tx3);letter-spacing:.04em}
+  .dbox b{display:block;margin:2px 0 6px;font-size:1rem;color:var(--tx)}
+  .dbox p{margin:0 0 8px;font-size:.87rem;color:var(--tx2)}
+  .dbox ul{margin:0;padding-left:17px;font-size:.85rem;color:var(--tx2)}
+  .dbox li{margin:3px 0}
+  .dmid{text-align:center;padding:10px 12px}
+  .dpatch{
+    display:inline-block;padding:6px 14px;border-radius:8px;
+    background:rgba(255,166,87,.14);border:1px solid rgba(255,166,87,.45);
+    color:var(--a3);font-family:"SF Mono",ui-monospace,monospace;font-size:.78rem;font-weight:700;
+  }
+  .dmid .dnote{margin-top:8px;font-size:.74rem;color:var(--tx3);line-height:1.5}
+  .dmid::before{content:"───▶";display:block;color:var(--tx3);font-size:.9rem;margin-bottom:8px}
+  @media(max-width:820px){.dmid::before{content:"▼"}}
+
+  /* --- tutorial --- */
+  .stepnum{
+    display:inline-flex;align-items:center;justify-content:center;
+    width:26px;height:26px;border-radius:8px;flex:none;margin-right:9px;
+    font-size:.78rem;font-weight:700;color:var(--bg);background:var(--a2);
+  }
+  h3.tut{
+    display:flex;align-items:center;margin:34px 0 8px;
+    padding-top:18px;border-top:1px solid var(--line);font-size:1.14rem;
+  }
+  h3.tut:first-of-type{border-top:none;padding-top:0}
+  .filepath{
+    display:inline-block;margin:14px 0 0;padding:5px 12px;border-radius:8px 8px 0 0;
+    background:var(--panel2);border:1px solid var(--line);border-bottom:none;
+    font-family:"SF Mono",ui-monospace,monospace;font-size:.76rem;color:var(--a1);font-weight:600;
+  }
+  .filepath + pre{margin-top:0;border-top-left-radius:0}
+  .chk{list-style:none;padding-left:0;margin:14px 0}
+  .chk li{
+    padding:9px 0 9px 30px;position:relative;font-size:.9rem;color:var(--tx2);
+    border-bottom:1px dashed var(--line);
+  }
+  .chk li:last-child{border-bottom:none}
+  .chk li::before{
+    content:"☐";position:absolute;left:4px;top:9px;color:var(--a2);font-size:1rem;
+  }
+  .chk li b{color:var(--tx)}
+</style>
+</head>
+<body>
+<button id="toggle">◐ 라이트</button>
+
+<header>
+  <div class="wrap">
+    <h1><span>DeepSWE</span>는 어떻게 동작하는가</h1>
+    <p class="sub">
+      AI 코딩 에이전트를 채점하는 벤치마크. 이 문서 하나로 전체 흐름과
+      <b style="color:var(--tx)">DeepSWE / 에이전트 / 사람</b>의 역할 구분을 이해할 수 있습니다.
+    </p>
+    <div class="meta">
+      <div><b>대상</b> github.com/datacurve-ai/deep-swe</div>
+      <div><b>태스크</b> 113개</div>
+      <div><b>언어</b> TS · Go · Python · JS · Rust</div>
+      <div><b>실행기</b> Pier (Harbor 호환)</div>
+    </div>
+  </div>
+</header>
+
+<nav class="tabbar">
+  <div class="wrap">
+    <button class="tab on" data-pane="concept">📘 동작 원리</button>
+    <button class="tab" data-pane="tutorial">🛠 내 에이전트 만들기</button>
+    <button class="tab" data-pane="model">🧠 내 모델만 테스트</button>
+    <button class="tab" data-pane="headroom">🗜 Headroom 압축 평가</button>
+  </div>
+</nav>
+
+<div class="pane on" id="pane-concept">
+
+<!-- ===================== 1 ===================== -->
+<section><div class="wrap">
+  <h2><span class="num">1</span> 한 줄 요약</h2>
+  <p class="lead">DeepSWE는 <b style="color:var(--tx)">"시험 문제집"</b>입니다. 실행 코드는 한 줄도 없습니다.</p>
+
+  <div class="grid g4">
+    <div class="card"><b>📕 DeepSWE</b><p>문제집<br><span style="color:var(--tx3);font-size:.85em">문제 + 채점기준표</span></p></div>
+    <div class="card"><b>🏛 Pier</b><p>시험 감독관<br><span style="color:var(--tx3);font-size:.85em">샌드박스 + 채점 실행</span></p></div>
+    <div class="card"><b>🤖 에이전트</b><p>응시자<br><span style="color:var(--tx3);font-size:.85em">mini-swe-agent 등</span></p></div>
+    <div class="card"><b>🧠 LLM</b><p>응시자의 두뇌<br><span style="color:var(--tx3);font-size:.85em">GPT / Claude / 자체모델</span></p></div>
+  </div>
+
+  <div class="note info">
+    <b>핵심 구조.</b> 데이터(문제)와 실행기(감독관)가 분리돼 있습니다.
+    그래서 <b>같은 문제집으로 여러 모델·에이전트를 공정하게 비교</b>할 수 있습니다.
+  </div>
+</div></section>
+
+<!-- ===================== 2 ===================== -->
+<section><div class="wrap">
+  <h2><span class="num">2</span> 태스크 하나의 구성</h2>
+  <p class="lead">113개 폴더가 전부 이 구조입니다. 샘플: <code>ts-pattern-match-each</code></p>
+
+  <div class="fileTree">
+tasks/<b>ts-pattern-match-each/</b><br>
+├── <b>task.toml</b>          <span class="cm">1.4KB — 메타데이터 (repo, 커밋, 이미지, 제한)</span><br>
+├── <b>instruction.md</b>     <span class="cm">3.0KB — 에이전트가 보는 유일한 입력</span><br>
+├── <b>environment/</b><br>
+│   └── Dockerfile      <span class="cm">2.2KB — 작업 환경 레시피</span><br>
+├── <b>tests/</b>             <span class="lock">🔒 에이전트 못 봄</span><br>
+│   ├── config.json     <span class="cm">7.5KB — ★ 채점 기준표</span><br>
+│   ├── test.patch      <span class="cm">33KB — 숨겨진 테스트</span><br>
+│   ├── grader.py       <span class="cm">13KB — 채점 로직</span><br>
+│   └── test.sh         <span class="cm">5KB — 실행 엔트리포인트</span><br>
+└── <b>solution/</b>          <span class="lock">🔒 에이전트 못 봄 · 채점에도 안 씀</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;├── solution.patch  <span class="cm">21KB — 모범답안 (사람 검수용 · 채점 미사용)</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;└── solve.sh        <span class="cm">0.4KB</span>
+  </div>
+
+  <h3>① <code>task.toml</code> — 환경이 데이터에 못 박혀 있음</h3>
+<pre><span class="c">[metadata]</span>
+task_id          = <span class="g">"ts-pattern-match-each"</span>
+language         = <span class="g">"typescript"</span>
+repository_url   = <span class="g">"https://github.com/gvergnaud/ts-pattern"</span>
+base_commit_hash = <span class="g">"f66fc061fde4f764b113ededa09be63dae564159"</span>
+
+<span class="c">[environment]</span>                        <span class="c"># 에이전트 작업 환경</span>
+docker_image = <span class="g">"public.ecr.aws/...:kh724kg...-v1.1"</span>
+cpus = 2 ; memory_mb = 8192
+
+<span class="c">[agent]</span>
+network_mode = <span class="y">"no-network"</span>          <span class="c"># 인터넷 차단</span>
+timeout_sec  = <span class="y">10800</span>                 <span class="c"># 3시간</span>
+
+<span class="c">[verifier]</span>
+environment_mode = <span class="y">"separate"</span>        <span class="c"># 채점은 반드시 별도 컨테이너</span>
+
+<span class="c">[[verifier.collect]]</span>                <span class="c"># ★ 에이전트의 제출 답안 추출</span>
+command = <span class="b">"git diff --binary f66fc061... HEAD > model.patch"</span></pre>
+
+  <h3>② <code>instruction.md</code> — 에이전트가 보는 전부</h3>
+<pre>ts-pattern's `match` short-circuits on the first matching pattern.
+Add a new top-level function <span class="g">`matchEach`</span> that evaluates ALL
+registered patterns and collects every matching handler's result
+into an array, returned in the order clauses were declared.
+
+`matchEach` must expose the same builder API as `match`, including
+all <span class="g">`.with()`</span> overloads, <span class="g">`.when()`</span>, <span class="g">`.returnType()`</span>, and <span class="g">`.narrow()`</span>.
+
+<span class="g">`.run()`</span> and <span class="g">`.exhaustive()`</span> return an array of all matching handler
+results. If nothing matched, they throw <span class="g">`NonExhaustiveError`</span>.
+...
+Add `matchEach` as a named export from the package entry point.
+
+<span class="y">IMPORTANT: Please work on this in a new branch from main and
+commit everything when you are done.</span></pre>
+
+  <div class="note">
+    <b>힌트도, 파일 경로도, 테스트도 없습니다.</b> 하지만 <b>공개 API 이름·시그니처는 전부 못 박혀</b> 있습니다.
+    사실상 <b>인터페이스 계약서</b>입니다 — 이게 나중에 테스트가 코드를 호출하는 근거가 됩니다.
+  </div>
+
+  <h3>③ <code>environment/Dockerfile</code> — 커닝 차단 장치</h3>
+<pre>FROM public.ecr.aws/x8v8d7g8/mars-base:latest
+WORKDIR /app
+
+<span class="c"># Git time-travel: 미래 히스토리를 통째로 제거 → 정답 유출 불가</span>
+ARG BASE_SHA=f66fc061...
+RUN git clone https://github.com/gvergnaud/ts-pattern . \
+ && git checkout -B <span class="b">"$DEFAULT"</span> <span class="b">"$BASE_SHA"</span> \
+ && <span class="r">git remote remove origin</span> \          <span class="c"># 미래 fetch 불가</span>
+ && <span class="r">git tag -d ... && git branch -D ...</span> \ <span class="c"># 미래 태그·브랜치 삭제</span>
+ && <span class="r">git reflog expire --expire=now --all && git gc --prune=now</span>
+
+RUN npm ci --include=dev              <span class="c"># 오프라인 대비 의존성 선설치</span>
+
+<span class="c"># 리포터는 레포 밖(/opt)에 설치 → /app 이 원본과 byte-identical 유지</span>
+RUN mkdir -p /opt/jest-ctrf && cd /opt/jest-ctrf \
+ && npm install jest-ctrf-json-reporter@0.0.11
+
+RUN cd /app && git config core.hooksPath /dev/null  <span class="c"># husky 훅 무력화</span></pre>
+
+  <h3>④ <code>tests/config.json</code> — ★ 채점 기준표</h3>
+<pre>{
+  <span class="b">"base_commit"</span>: <span class="g">"f66fc061..."</span>,        <span class="c">// 어느 시점으로 되돌릴지</span>
+
+  <span class="b">"f2p_node_ids"</span>: [  <span class="y">/* 85개 */</span>  ],   <span class="c">// Fail→Pass: 반드시 통과해야</span>
+  <span class="b">"p2p_node_ids"</span>: [  <span class="y">/* 6개  */</span>  ],   <span class="c">// Pass→Pass: 계속 통과해야</span>
+
+  <span class="b">"grade"</span>: { <span class="b">"format"</span>: <span class="g">"ctrf"</span>, <span class="b">"node_id"</span>: <span class="g">"name"</span> }
+}
+
+<span class="c">// F2P 실제 예시</span>
+<span class="g">"matchEach basic behavior should collect all matching handler results"</span>
+<span class="g">"matchEach basic behavior should NOT short-circuit on first match"</span>
+
+<span class="c">// P2P 실제 예시 (기존 기능 — 망가뜨리면 안 됨)</span>
+<span class="p">"helpers Take should correctly return the start of a tuple"</span></pre>
+
+  <h3>⑤ <code>tests/test.patch</code> — 숨겨진 테스트 (평범한 유닛테스트)</h3>
+<pre><span class="p">import</span> { matchEach, P } <span class="p">from</span> <span class="g">'../src'</span>;   <span class="c">// ← 에이전트가 짠 코드를 import</span>
+
+<span class="b">it</span>(<span class="g">'should collect all matching handler results'</span>, () => {
+  <span class="p">const</span> results = <span class="b">matchEach</span>({ role: <span class="g">'admin'</span>, level: 7, active: <span class="y">true</span> })
+    .with({ role: <span class="g">'admin'</span> },          () => <span class="g">'is-admin'</span>)
+    .with({ level: P.number.gte(5) }, () => <span class="g">'is-senior'</span>)
+    .with({ active: <span class="y">true</span> },           () => <span class="g">'is-active'</span>)
+    .run();
+
+  <span class="b">expect</span>(results).toEqual([<span class="g">'is-admin'</span>, <span class="g">'is-senior'</span>, <span class="g">'is-active'</span>]);
+});</pre>
+  <p style="font-size:.9rem">
+    코드를 <b style="color:var(--tx)">읽어서 분석하는 게 아니라, 실행해서 결과를 비교</b>합니다.
+    그래서 내부 구현이 뭐든 상관없습니다.
+  </p>
+</div></section>
+
+<!-- ===================== 3 ===================== -->
+<section><div class="wrap">
+  <h2><span class="num">3</span> 전체 흐름 8단계</h2>
+  <p class="lead">
+    <span class="chip c-hu">사람</span>
+    <span class="chip c-pi">Pier</span>
+    <span class="chip c-ag">에이전트</span>
+    <span class="chip c-ds">DeepSWE 데이터</span>
+    — 각 단계를 누가 하는지 표시했습니다.
+  </p>
+
+  <div class="flow">
+
+    <div class="frow">
+      <div class="fcol"><div class="fdot" style="background:var(--a3)">1</div><div class="fline"></div></div>
+      <div class="fbody">
+        <h4>명령 실행 <span class="chip c-hu">사람</span></h4>
+        <p>사람이 하는 일은 사실상 이 한 줄이 전부입니다.</p>
+<pre>pier run -p deep-swe/tasks --agent mini-swe-agent \
+         --model openai/gpt-5.5 --env docker</pre>
+      </div>
+    </div>
+
+    <div class="frow">
+      <div class="fcol"><div class="fdot" style="background:var(--a4)">2</div><div class="fline"></div></div>
+      <div class="fbody">
+        <h4>작업 컨테이너 기동 <span class="chip c-pi">Pier</span> <span class="chip c-ds">이미지·자원은 task.toml이 결정</span></h4>
+        <p><code>/app</code>에 base commit 시점의 실제 레포가 놓입니다. 인터넷 차단, CPU 2 / RAM 8GB, 타임아웃 3시간.</p>
+      </div>
+    </div>
+
+    <div class="frow">
+      <div class="fcol"><div class="fdot" style="background:var(--a2)">3</div><div class="fline"></div></div>
+      <div class="fbody">
+        <h4>에이전트 작업 <span class="chip c-ag">에이전트+LLM</span></h4>
+        <p><code>instruction.md</code>를 프롬프트로 받고, bash로 파일을 읽고 고칩니다.</p>
+<pre><span class="c"># 에이전트가 자율적으로 수행</span>
+cat src/match.ts ; grep -r <span class="g">"exhaustive"</span> src/
+<span class="c"># ... 코드 작성 ...</span>
+npx jest              <span class="c"># 자체 검증 (숨겨진 테스트는 아직 없음)</span></pre>
+      </div>
+    </div>
+
+    <div class="frow">
+      <div class="fcol"><div class="fdot" style="background:var(--a2)">4</div><div class="fline"></div></div>
+      <div class="fbody">
+        <h4>커밋 <span class="chip c-ag">에이전트</span> <span class="chip c-no">자동 아님!</span></h4>
+        <p>Pier도 도커도 대신 안 해줍니다. <code>instruction.md</code> 마지막 줄을 읽고 <b>에이전트가 직접</b> 실행해야 합니다.</p>
+<pre>git checkout -b fix && git add -A && git commit -m <span class="g">"add matchEach"</span></pre>
+      </div>
+    </div>
+
+    <div class="frow">
+      <div class="fcol"><div class="fdot" style="background:var(--a4)">5</div><div class="fline"></div></div>
+      <div class="fbody">
+        <h4>제출 답안 추출 <span class="chip c-pi">Pier</span> <span class="chip c-ds">명령은 task.toml에 정의</span></h4>
+        <p>원본 대비 <b>변경분만</b> 텍스트로 뽑습니다. 읽기만 할 뿐 커밋은 하지 않습니다.</p>
+<pre>git diff --binary &lt;base&gt; HEAD &gt; /logs/artifacts/model.patch</pre>
+      </div>
+    </div>
+
+    <div class="frow">
+      <div class="fcol"><div class="fdot" style="background:var(--a4)">6</div><div class="fline"></div></div>
+      <div class="fbody">
+        <h4>새 채점 컨테이너 <span class="chip c-pi">Pier</span></h4>
+        <p>에이전트가 3시간 동안 만든 캐시·전역설정·몽키패칭이 전부 사라진 <b>pristine 환경</b>. 여기에 패치만 적용합니다.</p>
+      </div>
+    </div>
+
+    <div class="frow">
+      <div class="fcol"><div class="fdot" style="background:var(--a1)">7</div><div class="fline"></div></div>
+      <div class="fbody">
+        <h4>테스트 실행 <span class="chip c-ds">DeepSWE의 grader.py + test.sh</span></h4>
+<pre><span class="c"># grader.py prepare</span>
+① 에이전트가 건드린 파일을 base로 <span class="r">reset</span>
+② <span class="g">model.patch</span> 적용        <span class="c">← 실패하면 즉시 0점</span>
+③ <span class="g">test.patch</span> <span class="y">강제 덮어쓰기</span>   <span class="c">← 테스트 조작 무효화</span>
+
+<span class="c"># test.sh</span>
+npx jest tests/helpers.test.ts     <span class="c">→ base_ctrf.json (P2P)</span>
+npx jest tests/match-each.test.ts  <span class="c">→ new_ctrf.json  (F2P)</span></pre>
+      </div>
+    </div>
+
+    <div class="frow">
+      <div class="fcol"><div class="fdot" style="background:var(--a1)">8</div></div>
+      <div class="fbody">
+        <h4>채점 <span class="chip c-ds">DeepSWE의 config.json 기준</span></h4>
+<pre><span class="p">binary</span> = <span class="y">1</span> <span class="p">if</span> (F2P 실패 0개 <span class="p">and</span> P2P 실패 0개) <span class="p">else</span> <span class="y">0</span></pre>
+      </div>
+    </div>
+
+  </div>
+</div></section>
+
+<!-- ===================== 4 : DOCKER ===================== -->
+<section><div class="wrap">
+  <h2><span class="num">4</span> 도커는 어떻게 쓰이나</h2>
+  <p class="lead">
+    태스크 하나당 컨테이너가 <b style="color:var(--tx)">2번</b> 뜹니다.
+    <b style="color:var(--a2)">작업용</b>과 <b style="color:var(--a1)">채점용</b>이 완전히 분리돼 있습니다.
+  </p>
+
+  <h3>언제 뜨고 언제 죽나</h3>
+  <div class="dockerline">
+    <div class="dbox d-work">
+      <div class="dtag">컨테이너 ①</div>
+      <b>작업용 (agent)</b>
+      <p>흐름 <b>2단계</b>에 기동 → <b>5단계</b>에 제출 답안 뽑고 종료</p>
+      <ul>
+        <li>수명: 최대 3시간</li>
+        <li>네트워크: <b>차단</b></li>
+        <li>에이전트가 여기서 코드 작성</li>
+      </ul>
+    </div>
+    <div class="dmid">
+      <div class="dpatch">model.patch</div>
+      <div class="dnote">호스트를 경유해 전달<br>(컨테이너끼리 직접 통신 없음)</div>
+    </div>
+    <div class="dbox d-grade">
+      <div class="dtag">컨테이너 ②</div>
+      <b>채점용 (verifier)</b>
+      <p>흐름 <b>6단계</b>에 <b>새로</b> 기동 → <b>8단계</b> 후 종료</p>
+      <ul>
+        <li>수명: 최대 30분</li>
+        <li>네트워크: <b>차단</b></li>
+        <li>①의 흔적이 전혀 없는 pristine</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="note info">
+    <b>왜 새로 띄우나?</b> ①에서 에이전트가 3시간 동안 만든 캐시·전역설정·몽키패칭·설치한 패키지가
+    채점 결과를 오염시킬 수 있기 때문입니다. <code>task.toml</code>의
+    <code>environment_mode = "separate"</code>가 이걸 강제합니다.
+  </div>
+
+  <h3>이미지는 어디서 오나</h3>
+  <table>
+    <thead><tr><th style="width:190px">구분</th><th>내용</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>실제 사용</b><br><span class="chip c-ds">task.toml</span></td>
+        <td>이미 빌드돼 <b>AWS ECR에 올라가 있는 이미지를 pull</b>합니다. 빌드 안 함.
+          <pre style="margin:8px 0 0">docker_image = <span class="g">"public.ecr.aws/d3j8x8q7/swe-bench-202605:kh724kg...-v1.1"</span></pre>
+        </td>
+      </tr>
+      <tr>
+        <td><b>재현용 레시피</b><br><code>environment/Dockerfile</code></td>
+        <td>그 이미지를 <b>어떻게 만들었는지</b> 기록한 문서. 평소엔 안 씁니다.
+          이미지가 사라지거나 직접 검증할 때만 사용.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>컨테이너 내부 구조</h3>
+  <p>파일이 들어오는 경로가 <b style="color:var(--tx)">3가지</b>입니다. 이 구분이 핵심입니다.</p>
+
+  <div class="fileTree">
+<span class="cm">컨테이너 내부 /</span><br>
+├── <b>app/</b>                  <span class="c-bake">🔥 이미지에 구워짐 (baked)</span><br>
+│   <span class="cm">└ ts-pattern 레포 전체. base commit 상태. 미래 히스토리 삭제됨</span><br>
+│<br>
+├── <b>logs/</b>                 <span class="c-mnt">🔗 호스트와 bind mount</span><br>
+│   ├── agent/            <span class="cm">← trial_dir/agent/     (에이전트 로그·트라젝토리)</span><br>
+│   ├── verifier/         <span class="cm">← trial_dir/verifier/  (reward.json, ctrf.json)</span><br>
+│   └── artifacts/        <span class="cm">← trial_dir/artifacts/ (model.patch) ★</span><br>
+│<br>
+├── <b>tests/</b>                <span class="c-cp">📤 나중에 업로드 (copy)</span><br>
+│   <span class="cm">└ 에이전트가 끝난 뒤 채점 컨테이너에만 올라감. ①에는 존재 자체가 없음</span><br>
+│<br>
+└── <b>solution/</b>             <span class="c-cp">📤 oracle 에이전트일 때만</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="cm">└ 일반 실행에서는 절대 안 올라감</span>
+  </div>
+
+  <div class="legend">
+    <span><b class="c-bake">🔥 baked</b> — 이미지 빌드 시 포함. 항상 존재</span>
+    <span><b class="c-mnt">🔗 mount</b> — 호스트 폴더와 실시간 연결</span>
+    <span><b class="c-cp">📤 copy</b> — 실행 중 특정 시점에 업로드</span>
+  </div>
+
+  <div class="note bad">
+    <b>이것이 커닝이 불가능한 이유.</b> <code>/tests</code>와 <code>/solution</code>은
+    <b>마운트가 아니라 업로드</b>입니다. 작업 컨테이너 ①이 살아있는 동안 그 경로는 <b>존재하지 않습니다</b>.
+    에이전트가 <code>ls /tests</code>를 해도 <code>No such file or directory</code>가 나옵니다.
+  </div>
+
+  <h3>마운트 상세 — 딱 3개</h3>
+  <p>Pier가 컨테이너에 거는 bind mount는 이게 전부입니다.</p>
+
+  <table>
+    <thead><tr><th style="width:180px">컨테이너 경로</th><th style="width:210px">호스트 경로</th><th>용도</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>/logs/agent/</code></td>
+        <td><code>jobs/&lt;job&gt;/&lt;trial&gt;/agent/</code></td>
+        <td>에이전트 로그, 트라젝토리(<code>trajectory.json</code>) — <code>pier view</code>가 읽는 파일</td>
+      </tr>
+      <tr>
+        <td><code>/logs/verifier/</code></td>
+        <td><code>jobs/&lt;job&gt;/&lt;trial&gt;/verifier/</code></td>
+        <td><b>채점 결과</b>: <code>reward.json</code>, <code>ctrf.json</code>, <code>run.log</code>, <code>test-stdout.txt</code></td>
+      </tr>
+      <tr>
+        <td><code>/logs/artifacts/</code></td>
+        <td><code>jobs/&lt;job&gt;/&lt;trial&gt;/artifacts/</code></td>
+        <td><b>★ 제출 답안 <code>model.patch</code></b> — 컨테이너 ①→②로 건너가는 통로</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note ok">
+    <b>왜 마운트인가?</b> 컨테이너는 끝나면 사라집니다. 마운트해두면
+    <b>결과물이 호스트 디스크에 그대로 남습니다.</b> 그래서 실행이 끝난 뒤에도
+    <code>cat jobs/*/*/verifier/reward.json</code>으로 점수를 볼 수 있습니다.
+    <br><span style="color:var(--tx3);font-size:.88em">
+    실행 후 Pier가 <code>chown</code>으로 소유권을 호스트 유저에게 되돌려줍니다 —
+    컨테이너가 root로 쓴 파일을 사람이 못 읽는 문제 방지.</span>
+  </div>
+
+  <h3>제출 답안이 컨테이너를 건너가는 법</h3>
+<pre><span class="c">① 작업 컨테이너 안에서 (collect 훅)</span>
+git diff --binary &lt;base&gt; HEAD &gt; <span class="g">/logs/artifacts/model.patch</span>
+                                  <span class="c">↓ 마운트라서 즉시 호스트에 반영</span>
+<span class="c">② 호스트</span>
+jobs/&lt;job&gt;/&lt;trial&gt;/artifacts/<span class="g">model.patch</span>
+                                  <span class="c">↓ 새 컨테이너에 같은 경로로 마운트</span>
+<span class="c">③ 채점 컨테이너 안에서 (grader.py)</span>
+git apply <span class="g">/logs/artifacts/model.patch</span></pre>
+  <p style="font-size:.9rem">
+    두 컨테이너는 <b style="color:var(--tx)">서로를 모릅니다.</b> 네트워크로 통신하지 않고,
+    오직 <b>호스트의 파일 하나</b>를 통해서만 연결됩니다.
+  </p>
+
+  <h3>네트워크 — 기본은 완전 차단</h3>
+  <p>Pier는 docker-compose 오버레이를 겹쳐서 구성합니다.</p>
+
+  <div class="split">
+    <div class="card">
+      <b>기본 (인터넷 불필요한 에이전트)</b>
+<pre style="margin:8px 0 0"><span class="c"># docker-compose-no-network.yaml</span>
+services:
+  main:
+    <span class="r">network_mode: none</span>   <span class="c"># 랜선 뽑기</span></pre>
+      <p style="margin-top:8px;font-size:.86rem">
+        DNS도 안 됨. GitHub에서 정답을 fetch하는 게 물리적으로 불가능.
+      </p>
+    </div>
+    <div class="card">
+      <b>예외 (LLM API가 필요할 때)</b>
+      <p style="font-size:.87rem;margin-bottom:8px">
+        Claude Code처럼 <b>컨테이너 안에서 도는 에이전트</b>는 API 호출용 통로가 필요합니다.
+        Pier는 <b>egress 프록시 + 도메인 allowlist</b>를 붙입니다.
+      </p>
+<pre style="margin:0"><span class="c"># 허용된 도메인만 통과</span>
+allowlist = [<span class="g">"api.anthropic.com"</span>,
+             <span class="g">"my-model.example.com"</span>]</pre>
+      <p style="margin-top:8px;font-size:.86rem">
+        ⚠️ base URL을 <b>config에 적어야</b> Pier가 자동 등록합니다.
+        코드에 하드코딩하면 차단됨.
+      </p>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>이게 Pier가 Harbor를 포크한 이유입니다.</b> Harbor는 <code>allow_internet = false</code>면
+    <b>전부</b> 막아버려서 컨테이너 내부 CLI 에이전트가 LLM을 호출조차 못 했습니다.
+    Pier는 <b>"태스크 환경은 격리하되, 에이전트에게 필요한 통로만 열어주는"</b> 방식으로 바꿨습니다.
+  </div>
+
+  <h3>실제 실행되는 컨테이너 스펙</h3>
+<pre><span class="c"># 이미지 (빌드 없이 pull)</span>
+image:        public.ecr.aws/d3j8x8q7/swe-bench-202605:kh724kg...-v1.1
+command:      [<span class="g">"sh"</span>, <span class="g">"-c"</span>, <span class="g">"sleep infinity"</span>]   <span class="c"># 대기만, exec로 명령 주입</span>
+
+<span class="c"># 자원 (task.toml이 강제)</span>
+cpus:         2
+memory:       8192 MB
+storage:      20480 MB
+gpus:         0
+
+<span class="c"># 네트워크</span>
+network_mode: none
+
+<span class="c"># 마운트</span>
+volumes:
+  - trial_dir/agent      → /logs/agent
+  - trial_dir/verifier   → /logs/verifier
+  - trial_dir/artifacts  → /logs/artifacts</pre>
+
+  <p style="font-size:.9rem">
+    컨테이너는 <code>sleep infinity</code>로 <b>가만히 떠 있기만</b> 합니다.
+    Pier가 필요할 때마다 <code>docker exec</code>로 명령을 밀어넣는 구조예요.
+    mini-swe-agent가 <code>subprocess.run</code>을 <code>docker exec</code>로 바꾸기만 하면 되는 것도 이 덕분입니다.
+  </p>
+
+  <h3>정리 — 3가지 파일 전달 방식</h3>
+  <table>
+    <thead><tr><th style="width:110px">방식</th><th style="width:180px">대상</th><th style="width:150px">시점</th><th>왜 이 방식인가</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b class="c-bake">🔥 baked</b></td>
+        <td><code>/app</code> 레포<br>의존성(node_modules)</td>
+        <td>이미지 빌드 시<br><span style="color:var(--tx3)">(사전에 완료)</span></td>
+        <td>모든 실행에서 <b>완전히 동일한 시작점</b> 보장. 오프라인이라 미리 설치 필수</td>
+      </tr>
+      <tr>
+        <td><b class="c-mnt">🔗 mount</b></td>
+        <td><code>/logs/*</code> 3개</td>
+        <td>컨테이너 기동 시</td>
+        <td>컨테이너가 죽어도 <b>결과물이 호스트에 남아야</b> 하므로</td>
+      </tr>
+      <tr>
+        <td><b class="c-cp">📤 copy</b></td>
+        <td><code>/tests</code><br><code>/solution</code></td>
+        <td>에이전트 종료 <b>후</b></td>
+        <td>에이전트가 <b>절대 볼 수 없게</b> 하려고. 마운트하면 처음부터 보임</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>도커 없이 돌리려면</h3>
+<pre>pier run -p deep-swe/tasks --agent mini-swe-agent <span class="g">--env modal</span></pre>
+  <p style="font-size:.9rem">
+    <b>Modal</b>(클라우드 샌드박스)로 바꾸면 로컬 도커가 필요 없고 <b>수십 개를 병렬 실행</b>합니다.
+    태스크당 3시간 × 113개라 로컬에서 전체를 돌리는 건 현실적으로 무리입니다.
+    DeepSWE 리더보드 점수도 전부 Modal로 측정됐습니다.
+  </p>
+</div></section>
+
+<!-- ===================== 5 ===================== -->
+<section><div class="wrap">
+  <h2><span class="num">5</span> 제출 답안 = git diff</h2>
+  <p class="lead">가장 헷갈리는 부분. <b style="color:var(--tx)">제출 답안</b>(= 에이전트가 낸 것)은 파일 전체가 아니라 <b style="color:var(--tx)">"원본을 이렇게 고쳐라"는 변경 지시서</b>입니다.</p>
+
+  <div class="note bad">
+    <b>⚠️ 이름이 비슷한 두 파일을 반드시 구분하세요.</b>
+  </div>
+
+  <table>
+    <thead><tr><th style="width:150px">파일</th><th style="width:130px">정체</th><th style="width:120px">개수</th><th>채점에 쓰나</th></tr></thead>
+    <tbody>
+      <tr style="background:rgba(126,231,135,.05)">
+        <td>📝 <code>model.patch</code></td>
+        <td><b style="color:var(--a2)">제출 답안</b><br><span style="color:var(--tx3);font-size:.85em">에이전트가 낸 것</span></td>
+        <td>실행할 때마다<br><b>새로 생성</b></td>
+        <td>✅ <b>씀</b> — 채점 컨테이너에서 코드를 복원하는 용도</td>
+      </tr>
+      <tr style="background:rgba(255,123,114,.04)">
+        <td>📗 <code>solution.patch</code></td>
+        <td><b style="color:var(--a5)">모범답안</b><br><span style="color:var(--tx3);font-size:.85em">데이터셋에 포함</span></td>
+        <td>태스크당 <b>1개 고정</b></td>
+        <td>❌ <b>안 씀</b> — 사람 검수용 · <code>oracle</code> 점검용</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note info">
+    <b>이 둘을 서로 비교하지 않습니다.</b> 채점은 오직
+    <code>model.patch</code>를 적용한 뒤 <b>숨겨진 테스트를 실행</b>해서 이뤄집니다.
+    그래서 모범답안과 구조가 전혀 달라도 통과할 수 있습니다.
+  </div>
+
+  <div class="split">
+    <div class="card">
+      <b>시작 시점 (/app)</b>
+<pre style="margin:8px 0 0">src/index.ts     <span class="c">원본</span>
+src/match.ts     <span class="c">원본</span>
+<span class="c">(match-each.ts 없음)</span></pre>
+    </div>
+    <div class="card">
+      <b>에이전트 작업 후</b>
+<pre style="margin:8px 0 0">src/index.ts      <span class="g">export 한 줄 추가</span>
+src/match.ts      <span class="g">공용 로직 추출</span>
+src/match-each.ts <span class="g">새로 만듦</span></pre>
+    </div>
+  </div>
+
+  <h3>추출된 제출 답안 (model.patch)</h3>
+<pre>diff --git a/src/index.ts b/src/index.ts
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -1,3 +1,4 @@
+ export { match } from './match';
+<span class="g">+export { matchEach } from './match-each';</span>      <span class="c">← 추가한 줄</span>
+ export { P } from './patterns';
+
+diff --git a/src/match-each.ts b/src/match-each.ts
+<span class="g">new file mode 100644</span>                            <span class="c">← 새로 만든 파일</span>
++++ b/src/match-each.ts
+@@ -0,0 +1,139 @@
+<span class="g">+export function matchEach(value) { ... }</span></pre>
+
+  <div class="grid g3">
+    <div class="card"><b>크기</b><p>레포 전체는 수백 MB, diff는 20KB</p></div>
+    <div class="card"><b>깨끗한 재현</b><p>원본 + diff만 있으면 어디서든 동일 재현. 캐시·임시파일 오염이 안 딸려옴</p></div>
+    <div class="card"><b>검토 가능</b><p>사람이 "정확히 뭘 바꿨나" 한눈에 확인</p></div>
+  </div>
+
+  <div class="note bad">
+    <b>⚠️ 커밋 안 하면 무조건 0점.</b>
+    <code>git diff &lt;base&gt; HEAD</code>는 <b>커밋된 것만</b> 봅니다.
+    파일을 아무리 잘 고쳐놨어도 커밋을 안 하면 <code>HEAD</code>가 시작 커밋 그대로라
+    diff가 <b>빈 문자열</b>이 되고 → 테스트 전부 실패 → <code>reward: 0</code>.
+    실전에서 가장 흔한 사고입니다.
+  </div>
+
+  <h3>그래서 이 diff로 뭘 하나 — <span style="color:var(--a2)">읽는 게 아니라 재현합니다</span></h3>
+  <p class="lead" style="margin-bottom:18px">
+    가장 많이 오해하는 지점입니다. diff는 <b style="color:var(--tx)">평가 대상이 아니라 재현 재료</b>입니다.
+  </p>
+
+  <div class="split">
+    <div class="card" style="border-color:rgba(255,123,114,.38)">
+      <b>❌ 이렇게 하지 않습니다</b>
+      <ul>
+        <li>diff를 읽고 "잘 짰네" 판단</li>
+        <li>diff를 <b>모범답안과 비교</b></li>
+        <li>diff를 LLM에게 읽혀서 채점</li>
+        <li>줄 수·파일 수를 세서 점수화</li>
+      </ul>
+      <p style="margin-top:10px;font-size:.86rem;color:var(--tx3)">
+        정적 분석이나 유사도 비교는 <b>전혀 없습니다.</b>
+      </p>
+    </div>
+    <div class="card" style="border-color:rgba(126,231,135,.35)">
+      <b>✅ 실제로 하는 일</b>
+      <ul>
+        <li>새 컨테이너에 diff를 <b>적용</b></li>
+        <li>에이전트가 만든 코드 상태로 <b>복원</b></li>
+        <li>숨겨진 테스트를 <b>실제로 실행</b></li>
+        <li>통과/실패 개수로 채점</li>
+      </ul>
+      <p style="margin-top:10px;font-size:.86rem;color:var(--tx3)">
+        <b>코드를 진짜로 돌려봅니다.</b>
+      </p>
+    </div>
+  </div>
+
+  <h4 style="margin:26px 0 10px;font-size:1.02rem">재현 과정 5단계</h4>
+
+  <div class="flow">
+    <div class="frow">
+      <div class="fcol"><div class="fdot" style="background:var(--a1)">1</div><div class="fline"></div></div>
+      <div class="fbody">
+        <h4>새 컨테이너 기동 <span class="chip c-no">에이전트 흔적 0</span></h4>
+        <p>같은 이미지로 <b>완전히 새로</b> 띄웁니다. <code>/app</code>은 base commit 원본 상태.</p>
+      </div>
+    </div>
+
+    <div class="frow">
+      <div class="fcol"><div class="fdot" style="background:var(--a1)">2</div><div class="fline"></div></div>
+      <div class="fbody">
+        <h4>제출 답안 적용 → 코드 복원</h4>
+<pre><span class="c"># grader.py</span>
+reset_paths(patch_paths(read_patch(model_patch)), base)   <span class="c"># 먼저 원본으로</span>
+rc = git(<span class="g">"apply"</span>, <span class="g">"--whitespace=nowarn"</span>, model_patch).returncode
+
+<span class="p">if</span> rc != <span class="y">0</span>:
+    cmd_grade([<span class="g">"--apply-failed"</span>])   <span class="r"># ← 여기서 끝. 테스트 실행 안 함</span>
+    sys.exit(<span class="y">0</span>)</pre>
+        <p>이 시점에 <code>/app</code>은 <b>에이전트가 작업을 끝낸 그 상태</b>가 됩니다.</p>
+      </div>
+    </div>
+
+    <div class="frow">
+      <div class="fcol"><div class="fdot" style="background:var(--a1)">3</div><div class="fline"></div></div>
+      <div class="fbody">
+        <h4>숨겨진 테스트 강제 투입 <span class="chip c-ds">test.patch</span></h4>
+<pre>reset_paths(patch_paths(read_patch(test_patch)), <span class="g">"HEAD"</span>)  <span class="c"># 조작분 되돌리고</span>
+git(<span class="g">"apply"</span>, test_patch)                              <span class="c"># 원본 테스트 적용</span></pre>
+        <p>에이전트가 테스트를 고쳐놨더라도 <b>여기서 전부 덮어씌워집니다.</b></p>
+      </div>
+    </div>
+
+    <div class="frow">
+      <div class="fcol"><div class="fdot" style="background:var(--a2)">4</div><div class="fline"></div></div>
+      <div class="fbody">
+        <h4>진짜로 실행 <span class="chip c-ag">평범한 유닛테스트</span></h4>
+<pre>npx jest tests/helpers.test.ts     <span class="c">→ P2P 결과</span>
+npx jest tests/match-each.test.ts  <span class="c">→ F2P 결과</span></pre>
+        <p>여기서 <b>코드가 실제로 동작</b>합니다. 정적 분석이 아니라 실행입니다.</p>
+      </div>
+    </div>
+
+    <div class="frow">
+      <div class="fcol"><div class="fdot" style="background:var(--a2)">5</div></div>
+      <div class="fbody">
+        <h4>결과 대조 → 점수</h4>
+        <p>실행 리포트의 테스트 ID를 <code>config.json</code>의 F2P/P2P 목록과 맞춰봅니다.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="note info">
+    <b>왜 굳이 새 컨테이너에서 재현하나?</b><br>
+    에이전트가 3시간 작업한 컨테이너에는 <b>설치한 패키지, npm 캐시, 수정한 전역 설정
+    (<code>jest.config.js</code>, <code>~/.npmrc</code>), 몽키패칭, 켜둔 백그라운드 프로세스</b>가 남아 있습니다.
+    그 상태로 테스트하면 <b>"내 컴퓨터에선 되는데요"</b> 문제가 그대로 발생합니다.
+    <code>task.toml</code>의 <code>environment_mode = "separate"</code>가 이를 강제합니다.
+  </div>
+
+  <div class="note bad">
+    <b>유일한 예외 — 실행 없이 결정되는 경우.</b><br>
+    <b>2단계에서 패치 적용이 실패</b>하면 테스트를 <b>돌려보지도 않고</b> 즉시 <code>reward 0</code>입니다.
+    깨진 diff, 충돌하는 diff, 빈 diff(커밋 누락)가 여기 해당합니다.
+    <code>reward.json</code>에 <code>"apply_failed": 1</code>이 찍힙니다.
+  </div>
+
+  <div class="note ok" style="font-size:.95rem">
+    <b>한 줄 요약 —</b> diff는 <b>"판단 대상"이 아니라 "재현 재료"</b>입니다.
+    새 컨테이너에서 코드를 복원한 뒤 <b>실제로 테스트를 실행한 결과</b>로 채점합니다.
+  </div>
+</div></section>
+
+<!-- ===================== 5 ===================== -->
+<section><div class="wrap">
+  <h2><span class="num">6</span> 정답은 하나가 아니다</h2>
+  <p class="lead">문자열 비교를 하지 않습니다. <b style="color:var(--tx)">테스트를 통과하는 모든 코드가 정답</b>입니다.</p>
+
+<pre><span class="r">❌  내 패치 == 정답 패치 ?</span>            <span class="c">← 이렇게 안 함</span>
+<span class="g">✅  내 패치 적용 → 테스트 91개 통과 ?</span>  <span class="c">← 이렇게 함</span></pre>
+
+  <table>
+    <thead><tr><th style="width:130px">제출</th><th>파일 구성</th><th style="width:90px">결과</th></tr></thead>
+    <tbody>
+      <tr><td>레퍼런스</td><td><code>match-each.ts</code> + 4개 파일 리팩터링 (+582 −43줄)</td><td><span class="chip c-ag">reward 1</span></td></tr>
+      <tr><td>에이전트 A</td><td>파일 2개에 전부 몰아넣음, 리팩터링 안 함</td><td><span class="chip c-ag">reward 1</span></td></tr>
+      <tr><td>에이전트 B</td><td>파일 9개로 잘게 쪼갬, 내부 함수 이름 전부 다름</td><td><span class="chip c-ag">reward 1</span></td></tr>
+      <tr><td>에이전트 C</td><td>런타임은 맞는데 타입 레벨 테스트 2개 실패</td><td><span class="chip c-no">reward 0</span></td></tr>
+    </tbody>
+  </table>
+
+  <h3>왜 가능한가 — 공개 API만 고정, 내부는 자유</h3>
+  <div class="split">
+    <div class="card" style="border-color:rgba(88,166,255,.4)">
+      <b>🚪 고정 (명세가 정함)</b>
+      <ul>
+        <li>함수·클래스 이름 → <code>matchEach</code></li>
+        <li>메서드 → <code>.with()</code> <code>.run()</code></li>
+        <li>반환 타입 → 배열</li>
+        <li>에러 타입 → <code>NonExhaustiveError</code></li>
+        <li>import 경로 → 패키지 엔트리포인트</li>
+      </ul>
+    </div>
+    <div class="card" style="border-color:rgba(126,231,135,.35)">
+      <b>🔓 자유 (완전 무관)</b>
+      <ul>
+        <li>파일 개수 / 이름 / 위치</li>
+        <li>내부 헬퍼 함수 이름</li>
+        <li>클래스 vs 클로저</li>
+        <li>알고리즘 · 자료구조</li>
+        <li>주석 · 코드 스타일</li>
+      </ul>
+    </div>
+  </div>
+
+  <p style="font-size:.9rem">
+    테스트는 <code>import { matchEach } from '../src'</code> <b style="color:var(--tx)">문 하나만 두드립니다</b>.
+    그 안에서 뭘 만들든 테스트가 직접 호출할 일이 없습니다. <code>JSON.parse()</code>를 쓸 때 V8 내부 구현을 모르는 것과 같은 원리(캡슐화)입니다.
+  </p>
+
+  <div class="note bad">
+    <b>단, 이름을 어기면 즉사.</b> <code>matchEach</code> 대신 <code>matchAll</code>로 만들면
+    → import 실패 → 스위트 컴파일 실패 → 리포트에 테스트가 하나도 안 잡힘 →
+    <b>"리포트에 없는 F2P = 실패"</b> 규칙 적용 → 0점.
+  </div>
+</div></section>
+
+<!-- ===================== 6 ===================== -->
+<section><div class="wrap">
+  <h2><span class="num">7</span> 채점 규칙</h2>
+  <p class="lead">
+    앞서 본 대로 <b style="color:var(--tx)">새 컨테이너에서 실제로 테스트를 돌린 결과</b>로 채점합니다.
+    아래는 그 결과를 어떻게 점수로 바꾸는지에 대한 규칙입니다.
+  </p>
+
+  <div class="grid g2">
+    <div class="card" style="border-color:rgba(88,166,255,.4)">
+      <b>F2P (Fail → Pass) · 85개</b>
+      <p>원본에선 실패하던 테스트. <b>기능을 구현했는가</b>를 검사합니다.</p>
+    </div>
+    <div class="card" style="border-color:rgba(210,168,255,.4)">
+      <b>P2P (Pass → Pass) · 6개</b>
+      <p>원본에서도 통과하던 테스트. <b>기존 걸 안 부쉈는가</b>를 검사합니다.</p>
+    </div>
+  </div>
+
+<pre><span class="c"># grader.py</span>
+binary = <span class="y">1</span> <span class="p">if</span> (len(f2p) &gt; 0 <span class="p">and</span> ff == 0 <span class="p">and</span> pf == 0) <span class="p">else</span> <span class="y">0</span>
+<span class="c">#                            ^F2P실패 0    ^P2P실패 0</span></pre>
+
+  <h3>reward.json 예시</h3>
+  <div class="verdict v-ok">
+    <div class="score">1</div>
+    <div class="why"><b>완벽</b> — <code>f2p 85/85 · p2p 6/6 · partial 1.0</code></div>
+  </div>
+  <div class="verdict v-no">
+    <div class="score">0</div>
+    <div class="why"><b>타입 테스트 3개 실패</b> — <code>f2p 82/85 · p2p 6/6 · partial 0.967</code></div>
+  </div>
+  <div class="verdict v-no">
+    <div class="score">0</div>
+    <div class="why"><b>기능은 완성했으나 기존 helpers 깨뜨림</b> — <code>f2p 85/85 · p2p 4/6 · partial 0.978</code></div>
+  </div>
+  <div class="verdict v-no">
+    <div class="score">0</div>
+    <div class="why"><b>커밋 안 함 / 패치 적용 실패</b> — <code>apply_failed: 1</code></div>
+  </div>
+
+  <div class="note bad">
+    <b>부분 점수는 없습니다.</b> <code>partial 0.978</code>이어도 리더보드 점수는 <b>0</b>.
+    91개 중 하나만 틀려도 0점입니다. (<code>partial</code>·<code>f2p</code>·<code>p2p</code> 비율은 분석용으로만 기록)
+  </div>
+
+  <h3>화이트리스트 방식</h3>
+  <table>
+    <thead><tr><th>리포트 상태</th><th>판정</th></tr></thead>
+    <tbody>
+      <tr><td>목록에 있고 "통과"</td><td><span class="chip c-ag">✅ 인정</span></td></tr>
+      <tr><td>목록에 있고 "실패"</td><td><span class="chip c-no">❌ 실패</span></td></tr>
+      <tr><td>목록에 있는데 <b>리포트에 없음</b></td><td><span class="chip c-no">❌ 실패 처리</span> — 컴파일 깨져도 0점</td></tr>
+      <tr><td>리포트에 있는데 <b>목록에 없음</b></td><td><span class="chip">🚫 무시</span> — 테스트 100개 추가해도 점수 안 오름</td></tr>
+    </tbody>
+  </table>
+</div></section>
+
+<!-- ===================== 7 ===================== -->
+<section><div class="wrap">
+  <h2><span class="num">8</span> 커닝 방지 장치</h2>
+  <p class="lead">벤치마크가 신뢰받는 이유. 6중 방어입니다.</p>
+
+  <table>
+    <thead><tr><th style="width:200px">장치</th><th>내용</th></tr></thead>
+    <tbody>
+      <tr><td><b>Git time-travel</b></td><td>이미지 빌드 시 미래 커밋·태그·reflog를 <code>gc --prune=now</code>로 완전 삭제. <code>git log</code>로 정답을 훔쳐볼 수 없음</td></tr>
+      <tr><td><b>no-network</b></td><td>에이전트·채점기 모두 인터넷 차단. GitHub에서 실제 구현을 fetch 불가</td></tr>
+      <tr><td><b>separate 컨테이너</b></td><td>채점은 pristine 환경에서. 작업 중 만든 캐시·전역설정·몽키패칭 전부 무효</td></tr>
+      <tr><td><b>test.patch 강제 덮어쓰기</b></td><td>에이전트가 테스트를 고쳐놨어도 채점 직전 무조건 원본으로 덮어씀</td></tr>
+      <tr><td><b>툴체인 하이재킹 감시</b></td><td><code>package.json</code>, <code>ts-jest→babel</code> 교체, <code>conftest.py</code>, <code>Cargo.toml</code> 변경 감지. (babel로 바꾸면 타입 레벨 검증이 조용히 무력화됨)</td></tr>
+      <tr><td><b>리포터 격리</b></td><td>CTRF 리포터를 <code>/opt</code>에 설치해 <code>/app</code>을 원본과 byte-identical로 유지</td></tr>
+    </tbody>
+  </table>
+</div></section>
+
+<!-- ===================== 8 ===================== -->
+<section><div class="wrap">
+  <h2><span class="num">9</span> 역할 분담 — 누가 뭘 하나</h2>
+  <p class="lead">가장 중요한 정리입니다.</p>
+
+  <div class="tri">
+    <div>
+      <h4><span class="chip c-ds">DeepSWE</span> 데이터가 정함</h4>
+      <ul>
+        <li>무엇을 시킬지 (<code>instruction.md</code>)</li>
+        <li>어떤 레포·어떤 커밋</li>
+        <li><b>도커 이미지</b> (핀 고정)</li>
+        <li><b>CPU / 메모리 / 디스크</b></li>
+        <li><b>네트워크 차단</b> 여부</li>
+        <li>타임아웃 (3시간 / 30분)</li>
+        <li>숨겨진 테스트</li>
+        <li><b>채점 기준</b> (F2P/P2P 목록)</li>
+        <li>제출 답안 추출 방법 (collect 훅)</li>
+      </ul>
+    </div>
+    <div>
+      <h4><span class="chip c-ag">에이전트</span> 자율 수행</h4>
+      <ul>
+        <li>레포 구조 파악</li>
+        <li>어떤 파일을 고칠지 결정</li>
+        <li>코드 작성 · 수정</li>
+        <li>자체 테스트 · 디버깅</li>
+        <li><b>git 커밋</b> ⚠️ 필수</li>
+        <li>시간 · 비용 배분</li>
+      </ul>
+      <div class="note bad" style="margin:12px 0 0;font-size:.84rem;padding:10px 13px">
+        커밋은 <b>자동이 아닙니다.</b> Pier도 도커도 대신 안 해줍니다.
+      </div>
+    </div>
+    <div>
+      <h4><span class="chip c-hu">사람</span> 선택·실행</h4>
+      <ul>
+        <li>어떤 에이전트를 쓸지</li>
+        <li>어떤 모델을 쓸지</li>
+        <li>API 키 준비</li>
+        <li>어디서 실행할지<br>(<code>docker</code> / <code>modal</code>)</li>
+        <li>몇 개 태스크 / 몇 회 반복</li>
+        <li>결과 해석</li>
+      </ul>
+      <div class="note ok" style="margin:12px 0 0;font-size:.84rem;padding:10px 13px">
+        코드 작성은 <b>전혀 안 합니다.</b> 명령 한 줄이면 끝.
+      </div>
+    </div>
+  </div>
+
+  <h3>바꿀 수 있는 것 / 없는 것</h3>
+  <table>
+    <thead><tr><th style="width:220px">항목</th><th style="width:150px">결정 주체</th><th>변경 가능?</th></tr></thead>
+    <tbody>
+      <tr><td>태스크 내용 · 테스트</td><td><span class="chip c-ds">DeepSWE</span></td><td>❌ 바꾸면 벤치마크 무의미</td></tr>
+      <tr><td>도커 이미지 · 자원 · 네트워크</td><td><span class="chip c-ds">DeepSWE</span></td><td>❌ <code>task.toml</code>에 고정</td></tr>
+      <tr><td>채점 기준 (F2P/P2P)</td><td><span class="chip c-ds">DeepSWE</span></td><td>❌ <code>config.json</code>에 고정</td></tr>
+      <tr><td>타임아웃</td><td><span class="chip c-ds">DeepSWE</span></td><td>⚠️ <code>override_timeout_sec</code>로 가능하나 비교 불공정</td></tr>
+      <tr><td>에이전트 (스캐폴드)</td><td><span class="chip c-hu">사람</span></td><td>✅ <code>--agent</code></td></tr>
+      <tr><td>모델 (LLM)</td><td><span class="chip c-hu">사람</span></td><td>✅ <code>--model</code></td></tr>
+      <tr><td>실행 위치</td><td><span class="chip c-hu">사람</span></td><td>✅ <code>--env docker|modal</code></td></tr>
+      <tr><td>태스크 개수 · 반복 횟수</td><td><span class="chip c-hu">사람</span></td><td>✅ <code>--n-tasks</code> / <code>n_attempts</code></td></tr>
+    </tbody>
+  </table>
+</div></section>
+
+<!-- ===================== 9 ===================== -->
+<section><div class="wrap">
+  <h2><span class="num">10</span> 실행 방법</h2>
+
+  <h3>준비물</h3>
+  <div class="grid g3">
+    <div class="card"><b>Docker</b><p>또는 Modal 계정 (병렬 실행용)</p></div>
+    <div class="card"><b>Python / uv</b><p><code>datacurve-pier</code> 설치</p></div>
+    <div class="card"><b>모델 API 키</b><p>또는 자체 엔드포인트</p></div>
+  </div>
+
+  <h3>기본 워크플로</h3>
+<pre>git clone https://github.com/datacurve-ai/deep-swe
+uv tool install datacurve-pier
+
+<span class="c"># 1. 파이프라인 먼저 검증 (매우 중요)</span>
+pier run -p deep-swe/tasks/ts-pattern-match-each --agent <span class="y">oracle</span>
+<span class="c">#    oracle = 정답 패치 적용 → reward 1 이어야 정상</span>
+pier run -p deep-swe/tasks/ts-pattern-match-each --agent <span class="y">nop</span>
+<span class="c">#    nop    = 아무것도 안 함  → reward 0 이어야 정상</span>
+
+<span class="c"># 2. 실제 평가 (10개 샘플)</span>
+export OPENAI_API_KEY=...
+pier run -p deep-swe/tasks --agent mini-swe-agent \
+         --model openai/gpt-5.5 --n-tasks 10 --sample-seed 0
+
+<span class="c"># 3. 트라젝토리 확인 / 실패 원인 분석</span>
+pier view
+pier critique run
+
+<span class="c"># 4. 결과</span>
+cat jobs/*/*/verifier/reward.json</pre>
+
+  <div class="note info">
+    <b>oracle / nop 먼저 돌리세요.</b> 커스텀 에이전트나 모델을 붙이기 전에
+    "환경과 채점기가 정상인가"를 확인하는 정석 절차입니다.
+    oracle이 1.0이 안 나오면 문제는 내 에이전트가 아니라 환경에 있습니다.
+  </div>
+
+  <h3>결과물 구조</h3>
+<pre>jobs/&lt;job_name&gt;/&lt;trial_id&gt;/verifier/
+  <span class="g">reward.json</span>       <span class="c">점수 (binary + 비율)</span>
+  <span class="g">ctrf.json</span>         <span class="c">테스트별 통과/실패 + 실패 이유</span>
+  <span class="g">test-stdout.txt</span>   <span class="c">원본 출력</span>
+  <span class="g">run.log</span>           <span class="c">stdout/stderr 전체</span>
+  reports/          <span class="c">러너 네이티브 리포트</span></pre>
+
+  <h3>내 모델 / 내 에이전트 붙이기</h3>
+  <div class="split">
+    <div class="card">
+      <b>내 모델만 테스트 — 코드 0줄</b>
+<pre style="margin:8px 0 0">agents:
+  - name: mini-swe-agent
+    model_name: <span class="g">openai/my-model-7b</span>
+    env:
+      OPENAI_API_KEY: ${MY_KEY}
+      OPENAI_BASE_URL: <span class="g">https://my.endpoint/v1</span></pre>
+      <p style="margin-top:8px;font-size:.85rem">
+        ⚠️ <code>no-network</code>라서 base URL을 <b>config에 명시</b>해야 Pier가 allowlist에 등록합니다.
+        <code>localhost</code>는 컨테이너 안에서 도달 불가.
+      </p>
+    </div>
+    <div class="card">
+      <b>내 에이전트 테스트 — BaseAgent 상속</b>
+<pre style="margin:8px 0 0"><span class="p">class</span> <span class="b">MyAgent</span>(BaseAgent):
+    <span class="p">def</span> name(): <span class="p">return</span> <span class="g">"my-agent"</span>
+    <span class="p">async def</span> setup(env): ...
+    <span class="p">async def</span> run(instruction, env, ctx):
+        ...
+        <span class="c"># 안전망: 커밋 누락 방지</span>
+        <span class="p">await</span> env.exec(
+          <span class="g">"cd /app && git add -A && "</span>
+          <span class="g">"git commit -m work || true"</span>)</pre>
+<pre style="margin:8px 0 0">pier run --agent-import-path <span class="g">"my_agent:MyAgent"</span></pre>
+    </div>
+  </div>
+</div></section>
+
+<!-- ===================== 10 ===================== -->
+<section><div class="wrap">
+  <h2><span class="num">11</span> 다른 태스크 샘플</h2>
+  <p class="lead">언어가 달라도 구조는 100% 동일합니다.</p>
+
+  <table>
+    <thead>
+      <tr><th style="width:150px">태스크</th><th style="width:110px">언어 / 러너</th><th>요구사항 요약</th><th style="width:110px">F2P / P2P</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>ts-pattern-<br>match-each</code></td>
+        <td>TypeScript<br><span class="chip">jest</span></td>
+        <td>모든 패턴을 평가해 결과를 배열로 모으는 <code>matchEach</code> 추가. 타입 레벨 exhaustiveness까지 강제</td>
+        <td><b style="color:var(--a1)">85</b> / <b style="color:var(--a4)">6</b></td>
+      </tr>
+      <tr>
+        <td><code>helm-array-<br>merge-strategies</code></td>
+        <td>Go<br><span class="chip">go test</span></td>
+        <td>Chart.yaml 어노테이션으로 배열 병합 전략(<code>append</code>/<code>merge</code>) 설정. 차트 스코프 격리</td>
+        <td><b style="color:var(--a1)">47</b> / <b style="color:var(--a4)">12</b></td>
+      </tr>
+      <tr>
+        <td><code>httpx-deterministic-<br>cookie-store</code></td>
+        <td>Python<br><span class="chip">pytest</span></td>
+        <td>결정적 <code>CookieStore</code> 추가. 개수 제한 초과 시 생성 순서대로 축출, TypeError/ValueError 규칙</td>
+        <td><b style="color:var(--a1)">115</b> / <b style="color:var(--a4)">1281</b></td>
+      </tr>
+      <tr>
+        <td><code>wasmi-trap-<br>coredumps</code></td>
+        <td>Rust<br><span class="chip">nextest</span></td>
+        <td>Wasm trap 시 코어덤프 생성. LEB128 인코딩·커스텀 섹션 4개 등 <b>바이트 단위 바이너리 포맷</b> 명세</td>
+        <td><b style="color:var(--a1)">22</b> / <b style="color:var(--a4)">58</b></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>httpx의 P2P 1281개</b>에 주목하세요. httpx <b>전체 테스트 스위트</b>입니다.
+    쿠키 관련 코드를 건드리다 어디 하나라도 깨뜨리면 즉시 0점 — <b>회귀 리스크</b>가 이 태스크의 진짜 난이도입니다.
+  </div>
+
+  <div class="grid g4">
+    <div class="card kpi"><div class="v" style="color:var(--a1)">113</div><div class="l">전체 태스크</div></div>
+    <div class="card kpi"><div class="v" style="color:var(--a2)">5</div><div class="l">언어</div></div>
+    <div class="card kpi"><div class="v" style="color:var(--a3)">3h</div><div class="l">태스크당 제한</div></div>
+    <div class="card kpi"><div class="v" style="color:var(--a4)">0 / 1</div><div class="l">점수 (부분점수 없음)</div></div>
+  </div>
+</div></section>
+
+<!-- ===================== 11 ===================== -->
+<section><div class="wrap">
+  <h2><span class="num">12</span> 왜 이 벤치마크가 특별한가</h2>
+
+  <div class="grid g2">
+    <div class="card">
+      <b>🆕 원본성 (contamination 회피)</b>
+      <p>기존 GitHub 이슈 재탕이 아니라 <b>새로 창작한 과제</b>. 모델이 학습 데이터에서 정답을 외우고 있을 가능성이 낮습니다.</p>
+    </div>
+    <div class="card">
+      <b>⏳ Long-horizon</b>
+      <p>단일 파일 버그 수정이 아니라 <b>아키텍처를 관통하는 기능 추가</b>. 레퍼런스 정답이 5~11개 파일, 수백 줄입니다.</p>
+    </div>
+    <div class="card">
+      <b>🎯 동작 기반 채점</b>
+      <p>코드 유사도가 아닌 <b>observable behavior</b>만 봅니다. 구현 방식이 달라도 인정.</p>
+    </div>
+    <div class="card">
+      <b>🔒 재현성</b>
+      <p>도커 이미지·base commit·자원·타임아웃이 데이터에 고정. 누가 언제 돌려도 <b>같은 조건</b>.</p>
+    </div>
+  </div>
+
+  <h3>왜 mini-swe-agent를 기준선으로 쓰나</h3>
+  <p>
+    스캐폴드가 얇을수록 <b style="color:var(--tx)">점수 ≈ 모델 실력</b>에 가까워집니다.
+    Claude Code처럼 자체 프롬프트·도구·컨텍스트 관리가 두꺼운 에이전트를 쓰면
+    "모델이 잘한 건지 스캐폴드가 잘한 건지" 구분이 안 됩니다.
+    mini-swe-agent는 <b>bash 도구 하나, 선형 히스토리, 상태 없는 실행</b>이라 약 100줄짜리 에이전트입니다.
+  </p>
+</div></section>
+
+<!-- ===================== 12 ===================== -->
+<section style="border-bottom:none"><div class="wrap">
+  <h2><span class="num">13</span> 최종 정리</h2>
+
+<pre><span class="y">1. 입력</span>    instruction.md 텍스트 하나 (2~4KB)
+          <span class="c">힌트·파일경로·테스트 없음. 단 공개 API 이름은 고정.</span>
+          + no-network 컨테이너 안의 실제 레포 (base commit 고정)
+
+<span class="y">2. 출력</span>    git diff &lt;base&gt; HEAD  →  model.patch
+          <span class="r">⚠️ 커밋 안 하면 빈 패치 = 0점</span>
+
+<span class="y">3. 테스트</span>  새 pristine 컨테이너에 model.patch 적용
+          + test.patch 강제 덮어쓰기 (숨겨진 유닛테스트)
+          → 언어별 러너 실행 → 리포트를 config.json과 대조
+
+<span class="y">4. 점수</span>    reward = 1  ⟺  F2P 전부 통과 <span class="p">AND</span> P2P 하나도 안 깨짐
+                          <span class="c">그 외 전부 0 (부분점수 없음)</span></pre>
+
+  <div class="grid g3" style="margin-top:24px">
+    <div class="card" style="border-color:rgba(88,166,255,.4)">
+      <b><span class="chip c-ds">DeepSWE</span></b>
+      <p>문제 · 환경 · 채점기준을 <b>전부 데이터로 고정</b>. 사용자가 바꿀 여지 없음.</p>
+    </div>
+    <div class="card" style="border-color:rgba(126,231,135,.35)">
+      <b><span class="chip c-ag">에이전트</span></b>
+      <p>코드 작성부터 <b>커밋까지 자율 수행</b>. 커밋은 자동이 아님.</p>
+    </div>
+    <div class="card" style="border-color:rgba(255,166,87,.4)">
+      <b><span class="chip c-hu">사람</span></b>
+      <p><b>명령 한 줄</b>. 에이전트·모델·실행위치만 고르면 끝.</p>
+    </div>
+  </div>
+</div></section>
+
+</div><!-- /pane-concept -->
+
+
+<!-- ============================================================ -->
+<!-- =================== PANE 2 : TUTORIAL ====================== -->
+<!-- ============================================================ -->
+<div class="pane" id="pane-tutorial">
+
+<section><div class="wrap">
+  <h2 style="margin-bottom:14px">🛠 내 에이전트 만들어서 DeepSWE 돌리기</h2>
+  <p class="lead">
+    <code>sample-agent</code>라는 이름의 에이전트를 처음부터 만들어 실제로 채점까지 받아봅니다.
+    <b style="color:var(--tx)">Pier를 fork하거나 deep-swe를 수정할 필요는 전혀 없습니다.</b>
+    별도 파이썬 패키지를 만들어 같은 가상환경에 설치하면 Pier가 알아서 불러옵니다.
+  </p>
+
+  <div class="grid g3">
+    <div class="card kpi"><div class="v" style="color:var(--a2)">9</div><div class="l">단계</div></div>
+    <div class="card kpi"><div class="v" style="color:var(--a1)">~40분</div><div class="l">예상 소요 (이미지 pull 포함)</div></div>
+    <div class="card kpi"><div class="v" style="color:var(--a3)">3</div><div class="l">만들 파일 개수</div></div>
+  </div>
+
+  <div class="note info">
+    <b>이 튜토리얼이 만드는 것.</b> LLM 없이도 동작을 확인할 수 있도록,
+    <b>1단계에서는 "정답을 하드코딩한 가짜 에이전트"</b>로 파이프라인을 먼저 통과시키고 →
+    <b>그 다음 실제 LLM을 붙입니다.</b>
+    이렇게 해야 실패했을 때 "내 코드 문제"인지 "LLM 문제"인지 구분됩니다.
+  </div>
+
+  <!-- STEP 0 -->
+  <h3 class="tut"><span class="stepnum">0</span>준비물 확인</h3>
+<pre>docker --version          <span class="c"># Docker Desktop 실행 중이어야 함</span>
+python3 --version         <span class="c"># 3.11+</span>
+<span class="c"># 디스크 20GB 이상 여유 (태스크 이미지가 큼)</span></pre>
+
+  <div class="note bad">
+    <b>Docker Desktop이 켜져 있어야 합니다.</b> 안 켜져 있으면
+    <code>Cannot connect to the Docker daemon</code> 에러가 납니다.
+  </div>
+
+  <!-- STEP 1 -->
+  <h3 class="tut"><span class="stepnum">1</span>설치 및 데이터셋 받기</h3>
+<pre>mkdir ~/deepswe-lab && cd ~/deepswe-lab
+
+<span class="c"># 문제집(데이터셋) — 수정할 일 없음</span>
+git clone https://github.com/datacurve-ai/deep-swe
+
+<span class="c"># 실행기</span>
+python3 -m venv .venv && source .venv/bin/activate
+pip install datacurve-pier
+
+pier --help    <span class="c"># 설치 확인</span></pre>
+
+  <!-- STEP 2 -->
+  <h3 class="tut"><span class="stepnum">2</span>내 에이전트 패키지 뼈대 만들기</h3>
+  <p>Pier는 <code>module.path:ClassName</code> 형식의 <b>import path</b>로 에이전트를 불러옵니다.
+     따라서 파이썬이 import할 수 있는 패키지면 됩니다.</p>
+
+<pre>mkdir -p sample-agent/sample_agent
+cd sample-agent
+touch sample_agent/__init__.py</pre>
+
+  <p>디렉터리 구조:</p>
+  <div class="fileTree">
+~/deepswe-lab/<br>
+├── deep-swe/            <span class="cm">데이터셋 (건드리지 않음)</span><br>
+├── .venv/<br>
+└── <b>sample-agent/</b>        <span class="cm">← 내가 만드는 것</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;├── pyproject.toml<br>
+&nbsp;&nbsp;&nbsp;&nbsp;└── sample_agent/<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── __init__.py<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└── agent.py     <span class="cm">← 핵심</span>
+  </div>
+
+  <div class="filepath">sample-agent/pyproject.toml</div>
+<pre>[project]
+name = <span class="g">"sample-agent"</span>
+version = <span class="g">"0.1.0"</span>
+requires-python = <span class="g">"&gt;=3.11"</span>
+dependencies = [<span class="g">"datacurve-pier"</span>]
+
+[build-system]
+requires = [<span class="g">"setuptools"</span>]
+build-backend = <span class="g">"setuptools.build_meta"</span></pre>
+
+  <!-- STEP 3 -->
+  <h3 class="tut"><span class="stepnum">3</span>에이전트 코드 작성 (더미 버전)</h3>
+  <p>
+    <code>BaseAgent</code>를 상속해 <b>4개 메서드</b>만 구현하면 됩니다:
+    <code>name()</code>, <code>version()</code>, <code>setup()</code>, <code>run()</code>.
+  </p>
+
+  <div class="filepath">sample-agent/sample_agent/agent.py</div>
+<pre><span class="p">from</span> pier.agents.base <span class="p">import</span> BaseAgent
+<span class="p">from</span> pier.environments.base <span class="p">import</span> BaseEnvironment
+<span class="p">from</span> pier.models.agent.context <span class="p">import</span> AgentContext
+
+
+<span class="p">class</span> <span class="b">SampleAgent</span>(BaseAgent):
+    <span class="g">"""가장 단순한 에이전트: 아직 LLM 없이 동작만 확인."""</span>
+
+    SUPPORTS_ATIF = <span class="y">False</span>      <span class="c"># 트라젝토리 포맷 미지원</span>
+    SUPPORTS_WINDOWS = <span class="y">False</span>
+
+    <span class="p">def</span> <span class="b">__init__</span>(self, logs_dir, model_name=<span class="y">None</span>, extra_env=<span class="y">None</span>, **kwargs):
+        <span class="b">super</span>().__init__(logs_dir=logs_dir, model_name=model_name, **kwargs)
+        self._extra_env = extra_env <span class="p">or</span> {}
+        <span class="c"># config yaml 의 kwargs 가 여기로 들어옴</span>
+        self._max_steps = kwargs.get(<span class="g">"max_steps"</span>, <span class="y">30</span>)
+
+    <span class="c"># --- 필수 4개 -------------------------------------------------</span>
+
+    <span class="p">@staticmethod</span>
+    <span class="p">def</span> <span class="b">name</span>() -> str:
+        <span class="p">return</span> <span class="g">"sample-agent"</span>
+
+    <span class="p">def</span> <span class="b">version</span>(self) -> str:
+        <span class="p">return</span> <span class="g">"0.1.0"</span>
+
+    <span class="p">async def</span> <span class="b">setup</span>(self, environment: BaseEnvironment) -> <span class="y">None</span>:
+        <span class="g">"""에이전트 실행 전 준비. 지금은 할 일 없음."""</span>
+        <span class="p">return</span>
+
+    <span class="p">async def</span> <span class="b">run</span>(self, instruction: str, environment: BaseEnvironment,
+                  context: AgentContext) -> <span class="y">None</span>:
+        self.logger.info(<span class="g">f"instruction 길이: {len(instruction)}자"</span>)
+
+        <span class="c"># ① 환경 탐색 — 진짜 에이전트라면 여기서 LLM 루프를 돈다</span>
+        ls = <span class="p">await</span> environment.exec(command=<span class="g">"ls /app"</span>)
+        self.logger.info(<span class="g">f"/app 내용: {ls.stdout}"</span>)
+
+        <span class="c"># ② 코드 수정 (지금은 흔적만 남김)</span>
+        <span class="p">await</span> environment.exec(
+            command=<span class="g">"echo '// sample-agent was here' &gt;&gt; /app/README.md"</span>
+        )
+
+        <span class="c"># ③ ★★★ 커밋 — 안 하면 무조건 0점 ★★★</span>
+        <span class="p">await</span> environment.exec(
+            command=(
+                <span class="g">"cd /app && git checkout -b sample-agent && git add -A && "</span>
+                <span class="g">'git -c user.name=agent -c user.email=a@b '</span>
+                <span class="g">'commit -q --no-verify -m "sample-agent work" || true'</span>
+            )
+        )
+
+        <span class="c"># ④ 지표 기록 (리포트·비용 집계용)</span>
+        context.n_agent_steps = <span class="y">3</span>
+        context.cost_usd = <span class="y">0.0</span>
+        context.metadata = {<span class="g">"note"</span>: <span class="g">"dummy run"</span>}</pre>
+
+  <div class="note bad">
+    <b>③번이 이 튜토리얼에서 가장 중요합니다.</b>
+    Pier도 도커도 커밋을 대신 해주지 않습니다.
+    <code>git diff &lt;base&gt; HEAD</code>는 <b>커밋된 것만</b> 보기 때문에
+    커밋이 없으면 빈 패치 → 무조건 <code>reward 0</code>입니다.
+  </div>
+
+  <!-- STEP 4 -->
+  <h3 class="tut"><span class="stepnum">4</span>설치</h3>
+<pre>cd ~/deepswe-lab/sample-agent
+pip install -e .
+
+<span class="c"># import 되는지 확인 (여기서 실패하면 Pier도 못 찾음)</span>
+python -c <span class="g">"from sample_agent.agent import SampleAgent; print(SampleAgent.name())"</span>
+<span class="c"># → sample-agent</span></pre>
+
+  <!-- STEP 5 -->
+  <h3 class="tut"><span class="stepnum">5</span>⭐ 파이프라인 먼저 검증 (건너뛰지 말 것)</h3>
+  <p>
+    내 에이전트를 돌리기 <b>전에</b>, 환경과 채점기가 정상인지부터 확인합니다.
+    Pier에 내장된 <code>oracle</code>·<code>nop</code> 에이전트를 씁니다.
+  </p>
+
+<pre>cd ~/deepswe-lab
+TASK=deep-swe/tasks/ts-pattern-match-each
+
+<span class="c"># ① oracle = 레퍼런스 정답 적용 → reward 1 이어야 정상</span>
+pier run -p $TASK --agent oracle --env docker
+
+<span class="c"># ② nop = 아무것도 안 함 → reward 0 이어야 정상</span>
+pier run -p $TASK --agent nop --env docker</pre>
+
+  <div class="split">
+    <div class="verdict v-ok" style="margin:0">
+      <div class="score">1</div>
+      <div class="why"><b>oracle</b> — 환경·채점기 정상 ✅</div>
+    </div>
+    <div class="verdict v-no" style="margin:0">
+      <div class="score">0</div>
+      <div class="why"><b>nop</b> — 채점기가 제대로 걸러냄 ✅</div>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>oracle이 1이 안 나오면</b> 문제는 내 에이전트가 아니라 <b>환경</b>입니다.
+    도커 미실행, 디스크 부족, 이미지 pull 실패 등을 먼저 확인하세요.
+    첫 실행은 이미지를 받느라 <b>10~20분</b> 걸릴 수 있습니다.
+  </div>
+
+  <!-- STEP 6 -->
+  <h3 class="tut"><span class="stepnum">6</span>내 에이전트 실행</h3>
+<pre>pier run -p deep-swe/tasks/ts-pattern-match-each \
+  <span class="g">--agent-import-path "sample_agent.agent:SampleAgent"</span> \
+  --env docker</pre>
+
+  <p>결과 확인:</p>
+<pre>cat jobs/*/*/verifier/reward.json
+<span class="c"># {"reward": 0, "f2p_passed": 0, "f2p_total": 85, ...}</span>
+
+<span class="c"># ★ 제출 답안이 제대로 만들어졌는지 — 이게 핵심 체크포인트</span>
+cat jobs/*/*/artifacts/model.patch</pre>
+
+  <div class="note ok">
+    <b>이 시점의 목표는 reward 1이 아닙니다.</b>
+    아직 코드를 안 짰으니 <code>reward 0</code>이 정상입니다.
+    확인해야 할 것은 <b><code>model.patch</code>에 README 수정 diff가 들어있는가</b>입니다.
+    들어있다면 <b>커밋 → diff 추출 → 패치 적용</b> 파이프라인이 전부 정상 동작한다는 뜻입니다.
+    <br><br>
+    <b>model.patch가 비어 있다면?</b> → 커밋이 안 된 것입니다. 3단계 ③번을 다시 확인하세요.
+  </div>
+
+  <!-- STEP 7 -->
+  <h3 class="tut"><span class="stepnum">7</span>LLM 붙이기 (진짜 에이전트로)</h3>
+  <p>
+    이제 더미를 실제 LLM 루프로 교체합니다. <b>bash 하나만 주는</b> 최소 구조입니다
+    (mini-swe-agent와 같은 철학).
+  </p>
+
+  <div class="filepath">sample-agent/sample_agent/agent.py — run() 교체</div>
+<pre><span class="p">import</span> re, os
+<span class="p">from</span> openai <span class="p">import</span> AsyncOpenAI
+
+SYSTEM = <span class="g">"""You are a coding agent working in /app.
+Reply with EXACTLY ONE bash command inside a ```bash block.
+When the task is complete, reply with: TASK_DONE"""</span>
+
+<span class="p">async def</span> <span class="b">run</span>(self, instruction, environment, context):
+    client = AsyncOpenAI(api_key=self._extra_env[<span class="g">"OPENAI_API_KEY"</span>],
+                         base_url=self._extra_env.get(<span class="g">"OPENAI_BASE_URL"</span>))
+    msgs = [{<span class="g">"role"</span>: <span class="g">"system"</span>, <span class="g">"content"</span>: SYSTEM},
+            {<span class="g">"role"</span>: <span class="g">"user"</span>,   <span class="g">"content"</span>: instruction}]
+
+    in_tok = out_tok = <span class="y">0</span>
+    <span class="p">for</span> step <span class="p">in</span> <span class="b">range</span>(self._max_steps):
+        r = <span class="p">await</span> client.chat.completions.create(
+            model=self._parsed_model_name, messages=msgs)
+        reply = r.choices[<span class="y">0</span>].message.content
+        in_tok  += r.usage.prompt_tokens
+        out_tok += r.usage.completion_tokens
+        msgs.append({<span class="g">"role"</span>: <span class="g">"assistant"</span>, <span class="g">"content"</span>: reply})
+
+        <span class="p">if</span> <span class="g">"TASK_DONE"</span> <span class="p">in</span> reply:
+            <span class="p">break</span>
+
+        m = re.search(<span class="g">r"```bash\n(.*?)```"</span>, reply, re.S)
+        <span class="p">if</span> <span class="p">not</span> m:
+            msgs.append({<span class="g">"role"</span>: <span class="g">"user"</span>,
+                         <span class="g">"content"</span>: <span class="g">"Reply with one ```bash block."</span>})
+            <span class="p">continue</span>
+
+        <span class="c"># 액션 실행 → 결과를 그대로 다음 턴 입력으로 (선형 히스토리)</span>
+        res = <span class="p">await</span> environment.exec(command=m.group(<span class="y">1</span>), timeout_sec=<span class="y">120</span>)
+        obs = (res.stdout <span class="p">or</span> <span class="g">""</span>) + (res.stderr <span class="p">or</span> <span class="g">""</span>)
+        msgs.append({<span class="g">"role"</span>: <span class="g">"user"</span>, <span class="g">"content"</span>: <span class="g">f"exit={res.return_code}\n{obs[:4000]}"</span>})
+
+    <span class="c"># ★ 안전망: LLM이 커밋을 깜빡해도 반드시 커밋</span>
+    <span class="p">await</span> environment.exec(command=(
+        <span class="g">"cd /app && git add -A && "</span>
+        <span class="g">'git -c user.name=agent -c user.email=a@b '</span>
+        <span class="g">'commit -q --no-verify -m "agent work" || true'</span>))
+
+    context.n_input_tokens  = in_tok
+    context.n_output_tokens = out_tok
+    context.n_agent_steps   = step + <span class="y">1</span></pre>
+
+  <h4 style="margin:22px 0 8px;font-size:1rem">네트워크 허용 선언</h4>
+  <p>
+    DeepSWE 태스크는 <code>network_mode = "no-network"</code>입니다.
+    컨테이너 <b>안에서</b> LLM API를 호출하려면 도메인을 열어달라고 선언해야 합니다.
+  </p>
+<pre><span class="p">from</span> pier.models.agent.network <span class="p">import</span> NetworkAllowlist
+
+    <span class="p">def</span> <span class="b">network_allowlist</span>(self) -> NetworkAllowlist:
+        <span class="p">return</span> NetworkAllowlist(domains=[<span class="g">"api.openai.com"</span>])</pre>
+
+  <div class="note">
+    <b>주의.</b> <code>localhost</code>나 <code>127.0.0.1</code>은 컨테이너 안에서 <b>자기 자신</b>이라
+    호스트의 로컬 모델에 접근할 수 없습니다. 자체 모델을 쓰려면 컨테이너에서 도달 가능한
+    호스트명(공인 도메인, 터널링 URL 등)을 쓰고 그 도메인을 allowlist에 넣으세요.
+  </div>
+
+  <h4 style="margin:22px 0 8px;font-size:1rem">에이전트를 컨테이너 안에 설치해야 한다면</h4>
+  <p>CLI 바이너리가 필요한 경우 <code>install_spec()</code>으로 이미지 빌드 단계에 설치할 수 있습니다.</p>
+<pre><span class="p">from</span> pier.models.agent.install <span class="p">import</span> AgentInstallSpec, InstallStep
+
+    <span class="p">def</span> <span class="b">install_spec</span>(self) -> AgentInstallSpec:
+        <span class="p">return</span> AgentInstallSpec(
+            agent_name=self.name(), version=self.version(),
+            steps=[InstallStep(run=<span class="g">"pip install openai"</span>, user=<span class="g">"root"</span>)],
+            verification_command=<span class="g">"python -c 'import openai'"</span>,
+        )</pre>
+  <p style="font-size:.88rem;color:var(--tx3)">
+    ※ 위 LLM 루프는 <b>호스트(Pier 프로세스)</b>에서 API를 호출하고 컨테이너엔
+    <code>exec</code>만 보내는 구조라, 사실 <code>install_spec</code>도
+    <code>network_allowlist</code>도 필요 없습니다. 둘 다 필요한 건
+    Claude Code처럼 <b>에이전트 자체가 컨테이너 안에서 도는 경우</b>입니다.
+  </p>
+
+  <!-- STEP 8 -->
+  <h3 class="tut"><span class="stepnum">8</span>실행 & 결과 분석</h3>
+<pre>export OPENAI_API_KEY=sk-...
+
+<span class="c"># 단일 태스크</span>
+pier run -p deep-swe/tasks/ts-pattern-match-each \
+  --agent-import-path <span class="g">"sample_agent.agent:SampleAgent"</span> \
+  --model openai/gpt-5.5 --env docker</pre>
+
+  <p>여러 태스크를 돌리거나 옵션이 많아지면 config 파일이 편합니다.</p>
+
+  <div class="filepath">myjob.yaml</div>
+<pre>job_name: sample-agent-test
+n_concurrent_trials: <span class="y">4</span>
+n_attempts: <span class="y">1</span>
+
+datasets:
+  - path: ./deep-swe/tasks
+    n_tasks: <span class="y">5</span>
+    sample_seed: <span class="y">0</span>          <span class="c"># 재현 가능한 랜덤 샘플</span>
+
+environment:
+  type: docker
+
+agents:
+  - import_path: <span class="g">sample_agent.agent:SampleAgent</span>
+    model_name: <span class="g">openai/gpt-5.5</span>
+    env:
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+    kwargs:
+      max_steps: <span class="y">50</span>
+
+  <span class="c"># 비교용 기준선 — 같은 job에서 동시 실행됨</span>
+  - name: mini-swe-agent
+    model_name: <span class="g">openai/gpt-5.5</span>
+    env:
+      OPENAI_API_KEY: ${OPENAI_API_KEY}</pre>
+
+<pre>pier run --config myjob.yaml</pre>
+
+  <h4 style="margin:22px 0 8px;font-size:1rem">결과 보기</h4>
+<pre><span class="c"># 점수</span>
+cat jobs/*/*/verifier/reward.json
+
+<span class="c"># 어떤 테스트가 왜 실패했는지</span>
+cat jobs/*/*/verifier/ctrf.json
+
+<span class="c"># 에이전트가 뭘 했는지 (대화형 뷰어)</span>
+pier view
+
+<span class="c"># 실패 원인을 LLM으로 분석</span>
+pier critique run</pre>
+
+  <!-- STEP 9 -->
+  <h3 class="tut"><span class="stepnum">9</span>스케일업</h3>
+<pre><span class="c"># 로컬 도커로 전체 113개는 비현실적 (태스크당 최대 3시간)</span>
+<span class="c"># → Modal 클라우드 샌드박스로 병렬 실행</span>
+pier run --config myjob.yaml <span class="g">--env modal</span></pre>
+
+  <div class="note info">
+    DeepSWE 리더보드 점수도 전부 <b>Modal에서 mini-swe-agent로</b> 측정됐습니다.
+    로컬은 개발·디버깅용, 전체 평가는 Modal이 정석입니다.
+  </div>
+
+  <!-- 체크리스트 -->
+  <h3 class="tut"><span class="stepnum">✓</span>실패 체크리스트</h3>
+  <p class="lead">reward가 계속 0이라면 위에서부터 순서대로 확인하세요.</p>
+  <ul class="chk">
+    <li><b>oracle이 1.0인가?</b> → 아니면 환경 문제 (도커·디스크·이미지)</li>
+    <li><b>model.patch가 비어 있는가?</b> → 커밋 누락. 가장 흔한 원인</li>
+    <li><b><code>apply_failed: 1</code>인가?</b> → 패치 충돌. base commit 외 파일을 건드렸는지 확인</li>
+    <li><b>f2p_passed가 0인가?</b> → 공개 API 이름이 명세와 다를 가능성. 컴파일 실패 여부를 <code>run.log</code>에서 확인</li>
+    <li><b>p2p가 깨졌는가?</b> → 기존 코드를 망가뜨림. 리팩터링 범위를 줄일 것</li>
+    <li><b>LLM 호출이 안 되는가?</b> → <code>no-network</code> 차단. allowlist 또는 호스트 호출 구조 확인</li>
+    <li><b>타임아웃인가?</b> → <code>max_steps</code>를 줄이거나 프롬프트를 개선</li>
+  </ul>
+
+  <!-- 요약 -->
+  <h3 class="tut"><span class="stepnum">≡</span>전체 요약</h3>
+<pre><span class="y">1</span>  pip install datacurve-pier + git clone deep-swe
+<span class="y">2</span>  sample-agent 패키지 생성
+<span class="y">3</span>  BaseAgent 상속 → name/version/setup/run 구현
+   <span class="r">★ run() 끝에 git commit 필수</span>
+<span class="y">4</span>  pip install -e .
+<span class="y">5</span>  <span class="g">oracle(1) / nop(0)</span> 으로 파이프라인 검증
+<span class="y">6</span>  --agent-import-path 로 내 에이전트 실행
+   <span class="g">→ model.patch 내용 확인 (핵심 체크포인트)</span>
+<span class="y">7</span>  LLM 루프 붙이기 (+ 커밋 안전망)
+<span class="y">8</span>  config yaml 로 다중 태스크 · 기준선 비교
+<span class="y">9</span>  --env modal 로 스케일업</pre>
+
+  <div class="note ok">
+    <b>기억할 것 3가지</b><br>
+    ① <b>커밋</b>하지 않으면 무조건 0점<br>
+    ② <b>oracle/nop</b>을 먼저 돌려 환경을 검증<br>
+    ③ deep-swe와 Pier는 <b>수정하지 않는다</b> — 내 코드는 별도 패키지로
+  </div>
+</div></section>
+
+</div><!-- /pane-tutorial -->
+
+
+<!-- ============================================================ -->
+<!-- =================== PANE 3 : MY MODEL ====================== -->
+<!-- ============================================================ -->
+<div class="pane" id="pane-model">
+
+<section><div class="wrap">
+  <h2 style="margin-bottom:14px">🧠 내 모델만 테스트하기</h2>
+  <p class="lead">
+    에이전트는 검증된 <code>mini-swe-agent</code>를 그대로 쓰고 <b style="color:var(--tx)">모델만 갈아끼웁니다.</b>
+    <b>코드는 한 줄도 작성하지 않습니다.</b> 설정 파일만 쓰면 됩니다.
+  </p>
+
+  <div class="note info">
+    <b>왜 mini-swe-agent를 쓰나?</b> 스캐폴드가 얇을수록 <b>점수 ≈ 모델 실력</b>에 가까워집니다.
+    두꺼운 에이전트를 쓰면 "모델이 잘한 건지 스캐폴드가 잘한 건지" 구분이 안 됩니다.
+    DeepSWE 리더보드도 전부 mini-swe-agent 기준입니다.
+  </div>
+
+  <!-- STEP 1 -->
+  <h3 class="tut"><span class="stepnum">1</span>내 모델이 어떤 형태인지 확인</h3>
+  <p>mini-swe-agent는 <b>모델 이름의 접두사</b>로 어댑터를 자동 선택합니다.</p>
+
+  <table>
+    <thead><tr><th style="width:190px">model_name 접두사</th><th style="width:180px">선택되는 어댑터</th><th>쓰는 경우</th></tr></thead>
+    <tbody>
+      <tr><td><code>openai/...</code></td><td>litellm_response<br><span style="color:var(--tx3);font-size:.85em">(Responses API)</span></td><td>OpenAI 또는 <b>OpenAI 호환 엔드포인트</b> (vLLM, SGLang, TGI 등)</td></tr>
+      <tr><td><code>openrouter/...</code></td><td>openrouter</td><td>OpenRouter 경유. BYOK 비용까지 집계</td></tr>
+      <tr><td><code>anthropic/...</code><br><code>gemini/...</code> 등</td><td>LiteLLM 자동감지</td><td>그 외 모든 provider</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note ok">
+    <b>자체 서빙 모델(vLLM 등)이라면 <code>openai/</code> 접두사를 쓰세요.</b>
+    대부분의 서빙 프레임워크가 OpenAI 호환 API를 제공하므로 가장 간단합니다.
+  </div>
+
+  <!-- STEP 2 -->
+  <h3 class="tut"><span class="stepnum">2</span>가장 빠른 방법 — CLI 한 줄</h3>
+<pre>export OPENAI_API_KEY=<span class="g">dummy</span>                       <span class="c"># 인증 없으면 아무 값</span>
+export OPENAI_BASE_URL=<span class="g">https://my-model.example.com/v1</span>
+
+pier run -p deep-swe/tasks/ts-pattern-match-each \
+  --agent mini-swe-agent \
+  --model <span class="g">openai/my-custom-model-7b</span> \
+  --env docker</pre>
+
+  <!-- STEP 3 -->
+  <h3 class="tut"><span class="stepnum">3</span>⚠️ 네트워크 함정 — 여기서 대부분 막힙니다</h3>
+  <p>DeepSWE 태스크는 <code>task.toml</code>에 이렇게 박혀 있습니다.</p>
+<pre><span class="c">[agent]</span>
+network_mode = <span class="r">"no-network"</span>   <span class="c"># 컨테이너 외부 통신 전면 차단</span></pre>
+
+  <p>
+    그런데 <code>mini-swe-agent</code>는 <b>컨테이너 안에서 실행됩니다</b>(installed agent).
+    즉 LLM API 호출도 컨테이너 안에서 나갑니다. 그냥 두면 차단되죠.
+  </p>
+  <p>
+    Pier는 이를 위해 <b>egress 프록시 + 도메인 allowlist</b>를 자동 구성합니다.
+    Pier 소스의 <code>network_allowlist()</code>가 <b>다음 위치에서 URL을 긁어옵니다</b>:
+  </p>
+
+<pre><span class="c"># pier/agents/installed/mini_swe_agent.py</span>
+<span class="p">for</span> key <span class="p">in</span> (<span class="g">"OPENAI_BASE_URL"</span>, <span class="g">"OPENAI_API_BASE"</span>,
+            <span class="g">"ANTHROPIC_BASE_URL"</span>, <span class="g">"GEMINI_API_BASE"</span>,
+            <span class="g">"OPENROUTER_API_BASE"</span>):
+    <span class="p">if</span> value := self._get_env(key):
+        urls.append(value)          <span class="c"># ← 여기서 자동 등록</span>
+
+<span class="p">if</span> self._config_yaml:
+    urls.extend(collect_url_values(parsed))   <span class="c"># config_yaml 안의 URL도</span></pre>
+
+  <div class="split">
+    <div class="card" style="border-color:rgba(126,231,135,.35)">
+      <b>✅ 되는 것</b>
+      <ul>
+        <li><code>env</code>에 <b>명시한</b> base URL<br>→ 자동으로 allowlist 등록</li>
+        <li>공인 도메인 / 사내 DNS로 잡히는 호스트</li>
+        <li><code>kwargs.config_yaml</code> 안의 URL</li>
+      </ul>
+    </div>
+    <div class="card" style="border-color:rgba(255,123,114,.38)">
+      <b>❌ 안 되는 것</b>
+      <ul>
+        <li><code>localhost</code> / <code>127.0.0.1</code><br>→ 컨테이너 안에선 <b>자기 자신</b></li>
+        <li>코드에 하드코딩한 URL<br>→ Pier가 못 읽어서 차단</li>
+        <li>사설 IP (컨테이너에서 라우팅 불가 시)</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="note bad">
+    <b>로컬 vLLM을 쓰고 싶다면?</b> 컨테이너에서 도달 가능한 주소로 노출해야 합니다.
+    ① ngrok/cloudflared 등으로 터널링 → 공인 도메인 사용,
+    ② 또는 같은 네트워크의 다른 머신에 서빙하고 그 호스트명 사용.
+    어느 쪽이든 <b>그 URL을 <code>env</code>에 반드시 적어야</b> allowlist에 등록됩니다.
+  </div>
+
+  <!-- STEP 4 -->
+  <h3 class="tut"><span class="stepnum">4</span>제대로 — config 파일로 여러 모델 동시 비교</h3>
+  <p>
+    <code>agents:</code>가 <b>리스트</b>라서, 한 번의 job에서 여러 모델을 같은 태스크로 돌려
+    바로 비교할 수 있습니다.
+  </p>
+
+  <div class="filepath">model-eval.yaml</div>
+<pre>job_name: my-model-vs-baseline
+n_concurrent_trials: <span class="y">8</span>
+n_attempts: <span class="y">1</span>              <span class="c"># pass@1. 5로 하면 pass@5 측정 가능</span>
+
+datasets:
+  - path: ./deep-swe/tasks
+    n_tasks: <span class="y">20</span>
+    sample_seed: <span class="y">0</span>          <span class="c"># 모든 모델이 같은 20개를 받음 (공정성)</span>
+
+environment:
+  type: docker
+
+agents:
+  <span class="c"># ① 내 모델</span>
+  - name: mini-swe-agent
+    model_name: <span class="g">openai/my-model-7b</span>
+    env:
+      OPENAI_API_KEY: ${MY_KEY}
+      OPENAI_BASE_URL: <span class="g">https://my-model.example.com/v1</span>
+    kwargs:
+      set_cache_control: default_end
+
+  <span class="c"># ② 내 모델 v2 (프롬프트·튜닝 비교)</span>
+  - name: mini-swe-agent
+    model_name: <span class="g">openai/my-model-7b-v2</span>
+    env:
+      OPENAI_API_KEY: ${MY_KEY}
+      OPENAI_BASE_URL: <span class="g">https://my-model.example.com/v1</span>
+
+  <span class="c"># ③ 기준선 (상용 모델)</span>
+  - name: mini-swe-agent
+    model_name: <span class="g">anthropic/claude-opus-4-8</span>
+    env:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}</pre>
+
+<pre>export MY_KEY=... ANTHROPIC_API_KEY=...
+pier run --config model-eval.yaml</pre>
+
+  <div class="note">
+    <b><code>sample_seed</code>를 반드시 고정하세요.</b> 시드를 안 주면 모델마다 다른 태스크를 받아
+    <b>비교 자체가 무의미</b>해집니다.
+  </div>
+
+  <!-- STEP 5 -->
+  <h3 class="tut"><span class="stepnum">5</span>추론 옵션 튜닝</h3>
+  <p>모델별 특성에 맞춰 <code>kwargs</code>로 조정합니다.</p>
+
+  <table>
+    <thead><tr><th style="width:210px">kwargs</th><th>설명</th></tr></thead>
+    <tbody>
+      <tr><td><code>reasoning_effort</code></td><td><code>low</code> / <code>medium</code> / <code>high</code> / <code>max</code>. Gemini 3는 <b>명시해야</b> thought summary가 보존됩니다</td></tr>
+      <tr><td><code>set_cache_control</code></td><td><code>default_end</code> — 프롬프트 캐싱 위치 지정 (비용 절감)</td></tr>
+      <tr><td><code>config_yaml</code></td><td>mini-swe-agent 자체 설정을 통째로 주입. 여기 적은 URL도 allowlist에 자동 등록</td></tr>
+    </tbody>
+  </table>
+
+<pre>agents:
+  - name: mini-swe-agent
+    model_name: <span class="g">openai/my-model-7b</span>
+    <span class="c"># 타임아웃이 부족하면 (기본 3시간)</span>
+    override_timeout_sec: <span class="y">14400</span>
+    kwargs:
+      reasoning_effort: high
+      config_yaml: |
+        model:
+          model_kwargs:
+            temperature: <span class="y">0.0</span>
+            max_tokens: <span class="y">8192</span></pre>
+
+  <!-- STEP 6 -->
+  <h3 class="tut"><span class="stepnum">6</span>결과 비교</h3>
+<pre><span class="c"># 모델별 점수 한눈에</span>
+<span class="p">for</span> d <span class="p">in</span> jobs/my-model-vs-baseline/*/; <span class="p">do</span>
+  echo <span class="g">"$(basename $d): $(cat $d/verifier/reward.json 2&gt;/dev/null)"</span>
+<span class="p">done</span>
+
+<span class="c"># 트라젝토리 뷰어 — 어디서 헤맸는지 확인</span>
+pier view
+
+<span class="c"># 실패 원인 자동 분석</span>
+pier critique run</pre>
+
+  <p style="font-size:.9rem">
+    <b>리더보드 점수 = <code>reward</code>가 1인 태스크의 비율</b>입니다.
+    20개 중 6개가 1이면 <b>30%</b>. <code>partial</code> 값은 참고용일 뿐 점수가 아닙니다.
+  </p>
+
+  <!-- 요약 -->
+  <h3 class="tut"><span class="stepnum">≡</span>요약</h3>
+<pre><span class="y">1</span>  모델 형태 확인 → <span class="g">openai/</span> 접두사면 대부분 해결
+<span class="y">2</span>  env 에 <span class="g">OPENAI_BASE_URL</span> 명시 (allowlist 자동 등록)
+<span class="y">3</span>  <span class="r">localhost 금지</span> — 컨테이너에서 도달 가능한 주소로
+<span class="y">4</span>  config yaml 에 agents 리스트로 여러 모델 나열
+<span class="y">5</span>  <span class="g">sample_seed 고정</span> — 공정 비교의 핵심
+<span class="y">6</span>  reward 1 비율로 비교</pre>
+
+  <div class="note ok">
+    <b>코드 작성 0줄.</b> 이 방식의 전부는 <b>YAML 파일 하나</b>입니다.
+    에이전트 스캐폴드를 직접 만들 이유가 없다면 이 방법이 정석입니다.
+  </div>
+</div></section>
+
+</div><!-- /pane-model -->
+
+
+<!-- ============================================================ -->
+<!-- =================== PANE 4 : HEADROOM ====================== -->
+<!-- ============================================================ -->
+<div class="pane" id="pane-headroom">
+
+<section><div class="wrap">
+  <h2 style="margin-bottom:14px">🗜 Headroom 압축 레이어 평가하기</h2>
+  <p class="lead">
+    <a href="https://github.com/headroomlabs-ai/headroom" style="color:var(--a1)">Headroom</a>은
+    LLM 트래픽을 중간에서 <b>압축하는 로컬 프록시</b>입니다.
+    DeepSWE로 <b style="color:var(--tx)">"토큰을 N% 줄였을 때 정확도가 얼마나 떨어지는가"</b>를 측정합니다.
+  </p>
+
+  <div class="note info">
+    <b>핵심 아이디어.</b> deep-swe도 Pier도 전혀 건드리지 않습니다.
+    <b>모델 URL만 Headroom 프록시로 바꿔치기</b>하면 됩니다.
+    에이전트 입장에선 그냥 평범한 OpenAI 호환 엔드포인트로 보입니다.
+  </div>
+
+  <!-- 구조 -->
+  <h3 class="tut"><span class="stepnum">1</span>구조 — 프록시를 중간에 끼운다</h3>
+
+<pre><span class="c">// 원래</span>
+에이전트 ──────────────────────────▶ 모델 API
+
+<span class="c">// Headroom 적용</span>
+에이전트 ──▶ <span class="g">Headroom 프록시</span> ──▶ 모델 API
+             <span class="y">└ 컨텍스트 압축</span>
+             <span class="y">└ 토큰 사용량 계측</span></pre>
+
+  <div class="dockerline">
+    <div class="dbox d-work">
+      <div class="dtag">실험군 A — 기준선</div>
+      <b>압축 없음</b>
+      <p>모델 API 직접 호출</p>
+      <ul><li>정확도: 기준값</li><li>토큰: 100%</li></ul>
+    </div>
+    <div class="dmid">
+      <div class="dpatch">비교</div>
+      <div class="dnote">동일 태스크·동일 시드<br>변수는 압축 여부 하나뿐</div>
+    </div>
+    <div class="dbox d-grade">
+      <div class="dtag">실험군 B — 압축</div>
+      <b>Headroom 경유</b>
+      <p>프록시가 컨텍스트를 압축</p>
+      <ul><li>정확도: <b>얼마나 떨어지나?</b></li><li>토큰: <b>얼마나 줄었나?</b></li></ul>
+    </div>
+  </div>
+
+  <!-- 옵션 해설 -->
+  <h3 class="tut"><span class="stepnum">2</span>실행 옵션 해설</h3>
+  <p>실제 DeepSWE v1 평가에 쓰인 옵션 조합입니다.</p>
+
+<pre>headroom proxy \
+  <span class="g">--mode token</span> \
+  <span class="g">--code-aware</span> \
+  <span class="g">--target-ratio 0.8</span> \
+  <span class="g">--intercept-tool-results</span> \
+  <span class="g">--no-cache</span> \
+  <span class="g">--no-ccr</span> \
+  <span class="g">--backend openai</span> \
+  <span class="g">--openai-api-url $MODEL_URL</span></pre>
+
+  <table>
+    <thead><tr><th style="width:220px">옵션</th><th>의미</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>--mode token</code></td>
+        <td>압축 우선 모드. <b>이전 턴까지 다시 써서(rewrite)</b> 최대한 줄입니다.
+        (반대는 <code>cache</code> — 이전 턴을 얼려서 provider 캐시 적중률을 높이는 모드)</td>
+      </tr>
+      <tr>
+        <td><code>--code-aware</code></td>
+        <td><b>AST 기반 코드 압축</b> 활성화. 코딩 벤치마크라 필수.
+        <span style="color:var(--a5)">기본값은 꺼짐</span>이며 <code>pip install headroom-ai[code]</code> 필요</td>
+      </tr>
+      <tr>
+        <td><code>--target-ratio 0.8</code></td>
+        <td>텍스트를 <b>원본의 80%만 유지</b>. 낮출수록 공격적
+        (<code>0.4</code>면 40%만 유지). 미지정 시 Kompress가 알아서 보수적으로 판단</td>
+      </tr>
+      <tr>
+        <td><code>--intercept-tool-results</code></td>
+        <td><b>툴 출력도 압축</b> (ast-grep Read outliner 등).
+        에이전트는 <code>cat</code>·<code>grep</code> 출력이 컨텍스트의 대부분이라 효과가 큽니다.
+        <span style="color:var(--a3)">⚠️ <code>HEADROOM_ROLLOUT_CHANNEL=canary</code> 필요</span></td>
+      </tr>
+      <tr>
+        <td><code>--no-cache</code></td>
+        <td>시맨틱 캐시 <b>끔</b>. 캐시가 켜져 있으면 <b>"압축 덕분"인지 "캐시 덕분"인지 구분 불가</b>.
+        벤치마크에선 반드시 꺼야 합니다</td>
+      </tr>
+      <tr>
+        <td><code>--no-ccr</code></td>
+        <td>가역 압축(CCR) <b>끔</b>. CCR은 원문을 로컬에 보관하고 모델이 <code>headroom_retrieve</code> 툴로
+        되찾는 기능인데, mini-swe-agent는 <b>bash 외 툴이 없어서</b> 그 툴을 호출할 수 없습니다.
+        켜두면 모델에게 <b>dangling pointer</b>만 남습니다 → <b>반드시 꺼야 함</b></td>
+      </tr>
+      <tr>
+        <td><code>--backend openai</code><br><code>--openai-api-url</code></td>
+        <td>업스트림을 OpenAI 호환 엔드포인트로 지정. <code>$MODEL_URL</code>이 실제 모델 주소</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note bad">
+    <b><code>--no-ccr</code>와 <code>--no-cache</code>가 벤치마크의 생명입니다.</b><br>
+    • 캐시가 켜지면 토큰 절감이 압축 때문인지 캐시 때문인지 섞여버립니다.<br>
+    • CCR이 켜지면 압축된 자리에 "필요하면 <code>headroom_retrieve</code>로 되찾아라"는 마커가 남는데,
+    bash만 쓰는 에이전트는 그 툴이 없어 <b>정보가 그냥 사라진 것</b>과 같아집니다.
+  </div>
+
+  <!-- 설치 -->
+  <h3 class="tut"><span class="stepnum">3</span>설치 및 프록시 기동</h3>
+<pre><span class="c"># code-aware 를 쓰려면 [code] extra 필수 (tree-sitter)</span>
+pip install <span class="g">'headroom-ai[code]'</span>
+
+<span class="c"># tool_result 인터셉터는 canary 채널에서만 동작</span>
+export HEADROOM_ROLLOUT_CHANNEL=canary
+export MODEL_URL=https://api.openai.com
+
+headroom proxy --port <span class="y">8787</span> --host <span class="y">0.0.0.0</span> \
+  --mode token --code-aware --target-ratio 0.8 \
+  --intercept-tool-results --no-cache --no-ccr \
+  --backend openai --openai-api-url $MODEL_URL</pre>
+
+  <p>기동되면 OpenAI 호환 엔드포인트가 열립니다.</p>
+<pre>http://&lt;호스트&gt;:8787<span class="g">/v1</span>      <span class="c"># /v1/chat/completions, /v1/responses ...</span></pre>
+
+  <!-- 네트워크 -->
+  <h3 class="tut"><span class="stepnum">4</span>⚠️ 가장 중요 — 컨테이너에서 프록시에 닿게 하기</h3>
+  <p>
+    <code>mini-swe-agent</code>는 <b>컨테이너 안에서</b> 돌고, 태스크는 <code>no-network</code>입니다.
+    프록시가 호스트의 <code>localhost:8787</code>에 있으면 <b>컨테이너에서 접근 불가</b>합니다.
+  </p>
+
+  <div class="split">
+    <div class="card" style="border-color:rgba(255,123,114,.38)">
+      <b>❌ 이렇게 하면 실패</b>
+<pre style="margin:8px 0 0">OPENAI_BASE_URL:
+  <span class="r">http://localhost:8787/v1</span></pre>
+      <p style="margin-top:8px;font-size:.86rem">
+        컨테이너 안의 <code>localhost</code>는 <b>컨테이너 자신</b>. 연결 거부됩니다.
+      </p>
+    </div>
+    <div class="card" style="border-color:rgba(126,231,135,.35)">
+      <b>✅ 해결책</b>
+      <ul>
+        <li><b>터널링</b> — <code>cloudflared</code>/<code>ngrok</code>으로 공인 도메인 부여 <span style="color:var(--tx3)">(가장 확실)</span></li>
+        <li><b>별도 호스트</b> — 다른 머신·사내 서버에 프록시를 띄우고 그 호스트명 사용</li>
+        <li><b>Modal 사용 시</b> — 어차피 클라우드라 공인 주소 필수</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="note ok">
+    <b>URL만 <code>env</code>에 적으면 allowlist는 자동입니다.</b>
+    Pier의 <code>network_allowlist()</code>가 <code>OPENAI_BASE_URL</code> 값을 읽어
+    egress 프록시 허용 목록에 넣어줍니다. 코드 수정 불필요.
+  </div>
+
+  <!-- 실험 설계 -->
+  <h3 class="tut"><span class="stepnum">5</span>A/B 실험 설계</h3>
+  <p>
+    <b>변수는 딱 하나(압축 여부)</b>여야 합니다. 태스크·시드·모델·에이전트를 모두 동일하게 맞춥니다.
+  </p>
+
+  <div class="filepath">headroom-eval.yaml</div>
+<pre>job_name: headroom-ab
+n_concurrent_trials: <span class="y">4</span>
+n_attempts: <span class="y">3</span>              <span class="c"># LLM 확률성 → 3회 평균으로 노이즈 감소</span>
+
+datasets:
+  - path: ./deep-swe/tasks
+    n_tasks: <span class="y">20</span>
+    sample_seed: <span class="y">0</span>          <span class="c">// ★ 두 조건이 같은 20개를 받음</span>
+
+environment:
+  type: docker
+
+agents:
+  <span class="c"># ── A: 기준선 (압축 없음)</span>
+  - name: mini-swe-agent
+    model_name: <span class="g">openai/gpt-5.5</span>
+    env:
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_BASE_URL: <span class="g">https://api.openai.com/v1</span>
+
+  <span class="c"># ── B: Headroom 경유 (압축)</span>
+  - name: mini-swe-agent
+    model_name: <span class="g">openai/gpt-5.5</span>        <span class="c"># 모델 동일</span>
+    env:
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_BASE_URL: <span class="g">https://my-headroom.trycloudflare.com/v1</span></pre>
+
+<pre>pier run --config headroom-eval.yaml</pre>
+
+  <div class="note">
+    <b><code>n_attempts: 3</code>을 권장합니다.</b> LLM은 확률적이라 1회 실행으로는
+    "압축 때문에 떨어진 건지 그냥 운이 나빴는지" 구분되지 않습니다.
+    태스크 20개 × 3회 = 60 trial × 2 조건 = <b>120 trial</b>이므로 Modal 사용을 권장합니다.
+  </div>
+
+  <!-- 측정 -->
+  <h3 class="tut"><span class="stepnum">6</span>무엇을 측정하나 — 2축</h3>
+
+  <div class="split">
+    <div class="card" style="border-color:rgba(88,166,255,.4)">
+      <b>① 정확도 (DeepSWE가 제공)</b>
+<pre style="margin:8px 0 0">cat jobs/headroom-ab/*/verifier/reward.json
+<span class="c"># reward 가 1인 비율 = pass@1</span></pre>
+      <p style="margin-top:8px;font-size:.86rem">
+        A 대비 B가 얼마나 떨어졌는가 = <b>압축의 대가</b>
+      </p>
+    </div>
+    <div class="card" style="border-color:rgba(126,231,135,.35)">
+      <b>② 토큰 절감 (양쪽에서 확인)</b>
+<pre style="margin:8px 0 0"><span class="c"># Pier 쪽 (에이전트가 보고한 값)</span>
+jq <span class="g">'.info.model_stats'</span> \
+   jobs/*/*/agent/trajectory.json
+
+<span class="c"># Headroom 대시보드</span>
+http://&lt;host&gt;:8787</pre>
+      <p style="margin-top:8px;font-size:.86rem">
+        <code>n_input_tokens</code>, <code>peak_context_tokens</code>, <code>cost_usd</code>
+      </p>
+    </div>
+  </div>
+
+  <h4 style="margin:22px 0 8px;font-size:1rem">결과 정리 예시</h4>
+  <table>
+    <thead><tr><th style="width:150px">조건</th><th style="width:110px">pass@1</th><th style="width:130px">평균 입력토큰</th><th style="width:110px">절감률</th><th>판정</th></tr></thead>
+    <tbody>
+      <tr><td>A 기준선</td><td><b>35.0%</b></td><td>1,240,000</td><td>—</td><td>—</td></tr>
+      <tr><td>B ratio 0.8</td><td><b style="color:var(--a2)">33.3%</b></td><td>870,000</td><td><b>30%</b></td><td><span class="chip c-ag">실용적</span> 손실 1.7%p</td></tr>
+      <tr><td>B ratio 0.5</td><td><b style="color:var(--a5)">21.7%</b></td><td>560,000</td><td><b>55%</b></td><td><span class="chip c-no">과도</span> 손실 13.3%p</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:.88rem;color:var(--tx3)">※ 수치는 표 형식 예시입니다. 실제 값은 직접 측정해야 합니다.</p>
+
+  <div class="note info">
+    <b><code>--target-ratio</code>를 여러 값으로 돌려 곡선을 그리는 게 핵심입니다.</b>
+    <code>0.9 / 0.8 / 0.7 / 0.6 / 0.5</code>로 스윕하면
+    <b>"정확도가 급격히 무너지는 지점"</b>을 찾을 수 있고, 그게 실전 운영 기준선이 됩니다.
+  </div>
+
+  <!-- 주의사항 -->
+  <h3 class="tut"><span class="stepnum">7</span>실험 신뢰도를 지키는 규칙</h3>
+  <ul class="chk">
+    <li><b><code>--no-cache</code> 필수</b> — 캐시 적중이 섞이면 압축 효과를 분리할 수 없음</li>
+    <li><b><code>--no-ccr</code> 필수</b> — bash만 쓰는 에이전트는 <code>headroom_retrieve</code>를 호출할 수 없음</li>
+    <li><b><code>sample_seed</code> 고정</b> — 두 조건이 반드시 같은 태스크를 받아야 함</li>
+    <li><b>모델·에이전트 동일</b> — 바꾸는 건 <code>OPENAI_BASE_URL</code> 하나뿐</li>
+    <li><b><code>n_attempts</code> ≥ 3</b> — LLM 확률성 노이즈 완화</li>
+    <li><b>프록시 안정성 확인</b> — 프록시가 죽으면 API 오류가 "정확도 하락"으로 잘못 집계됨</li>
+    <li><b>타임아웃 여유</b> — 압축 처리로 지연이 늘면 <code>override_timeout_sec</code> 상향 검토</li>
+  </ul>
+
+  <div class="note bad">
+    <b>가장 흔한 오염 원인.</b> 프록시 장애(타임아웃·5xx)로 에이전트가 중간에 멈추면
+    <code>reward 0</code>이 되는데, 이건 <b>압축 품질과 무관</b>합니다.
+    <code>pier view</code>로 트라젝토리를 열어 <b>API 오류로 끝난 trial은 제외</b>하고 집계하세요.
+  </div>
+
+  <!-- 요약 -->
+  <h3 class="tut"><span class="stepnum">≡</span>요약</h3>
+<pre><span class="y">1</span>  pip install <span class="g">'headroom-ai[code]'</span>
+<span class="y">2</span>  headroom proxy 기동 (<span class="g">--no-cache --no-ccr</span> 필수)
+<span class="y">3</span>  컨테이너에서 <b>도달 가능한 주소</b>로 노출 (터널링)
+<span class="y">4</span>  yaml 에 agents 2개: <span class="g">직접 호출</span> vs <span class="g">프록시 경유</span>
+   → 차이는 <span class="g">OPENAI_BASE_URL</span> 하나뿐
+<span class="y">5</span>  reward.json(정확도) + trajectory(토큰) 비교
+<span class="y">6</span>  <span class="g">--target-ratio 스윕</span>으로 손익분기점 탐색</pre>
+
+  <div class="note ok">
+    <b>DeepSWE는 여기서 "측정 자"의 역할만 합니다.</b>
+    압축 라이브러리를 평가하는 게 아니라,
+    <b>압축된 컨텍스트로도 실제 소프트웨어 작업을 완수할 수 있는가</b>를 검증하는 것입니다.
+    합성 지표(perplexity, ROUGE)보다 훨씬 실전에 가까운 신호를 줍니다.
+  </div>
+</div></section>
+
+</div><!-- /pane-headroom -->
+
+<footer><div class="wrap">
+  <div>
+    참고 —
+    <a href="https://github.com/datacurve-ai/deep-swe">deep-swe (데이터셋)</a> ·
+    <a href="https://github.com/datacurve-ai/pier">pier (실행기)</a> ·
+    <a href="https://github.com/SWE-agent/mini-swe-agent">mini-swe-agent (에이전트)</a> ·
+    <a href="https://www.harborframework.com/docs/tasks">Harbor 태스크 포맷</a>
+  </div>
+  <div style="margin-top:8px;color:var(--tx3)">
+    본 문서의 코드·수치는 <code>tasks/ts-pattern-match-each</code> 등 실제 태스크 파일에서 발췌했습니다.
+  </div>
+</div></footer>
+
+<script>
+  const btn = document.getElementById('toggle');
+  const KEY = 'deepswe-theme';
+  if (localStorage.getItem(KEY) === 'light') {
+    document.body.classList.add('light');
+    btn.textContent = '◐ 다크';
+  }
+  btn.addEventListener('click', () => {
+    document.body.classList.toggle('light');
+    const light = document.body.classList.contains('light');
+    btn.textContent = light ? '◐ 다크' : '◐ 라이트';
+    localStorage.setItem(KEY, light ? 'light' : 'dark');
+  });
+
+  // --- tabs ---
+  const tabs  = document.querySelectorAll('.tab');
+  const panes = document.querySelectorAll('.pane');
+  function show(id, push) {
+    tabs.forEach(t => t.classList.toggle('on', t.dataset.pane === id));
+    panes.forEach(p => p.classList.toggle('on', p.id === 'pane-' + id));
+    if (push) history.replaceState(null, '', '#' + id);
+    window.scrollTo({ top: 0 });
+  }
+  tabs.forEach(t => t.addEventListener('click', () => show(t.dataset.pane, true)));
+  const hash = location.hash.slice(1);
+  if (['concept','tutorial','model','headroom'].includes(hash)) show(hash, false);
+</script>
+</body>
+</html>
