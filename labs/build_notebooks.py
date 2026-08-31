@@ -130,11 +130,13 @@ BILLED_CODE = '''
 from kit import verify
 
 DEPLOY = env.get("AZURE_OPENAI_DEPLOYMENT")
+BILLED = None                     # 아래 리포트에서 다시 씁니다
 
 try:
 {setup}
     r = verify.billed(pairs, deployment=DEPLOY, model=DEPLOY, limit=3)
-    t = r["totals"]
+    BILLED = r["totals"]
+    t = BILLED
 
     table(
         ["케이스", "tiktoken 전→후", "API 실측 전→후", "추정 절감", "실측 절감"],
