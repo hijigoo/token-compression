@@ -296,6 +296,7 @@
     <button class="tab on" data-pane="concept">📘 동작 원리</button>
     <button class="tab" data-pane="tutorial">🛠 내 에이전트 만들기</button>
     <button class="tab" data-pane="model">🧠 내 모델만 테스트</button>
+    <button class="tab" data-pane="opencode">🧩 OpenCode 에이전트</button>
     <button class="tab" data-pane="headroom">🗜 Headroom 압축 평가</button>
   </div>
 </nav>
@@ -310,7 +311,7 @@
   <div class="grid g4">
     <div class="card"><b>📕 DeepSWE</b><p>문제집<br><span style="color:var(--tx3);font-size:.85em">문제 + 채점기준표</span></p></div>
     <div class="card"><b>🏛 Pier</b><p>시험 감독관<br><span style="color:var(--tx3);font-size:.85em">샌드박스 + 채점 실행</span></p></div>
-    <div class="card"><b>🤖 에이전트</b><p>응시자<br><span style="color:var(--tx3);font-size:.85em">mini-swe-agent 등</span></p></div>
+    <div class="card"><b>🤖 에이전트</b><p>응시자<br><span style="color:var(--tx3);font-size:.85em">mini-swe-agent · OpenCode · Claude Code 등</span></p></div>
     <div class="card"><b>🧠 LLM</b><p>응시자의 두뇌<br><span style="color:var(--tx3);font-size:.85em">GPT / Claude / 자체모델</span></p></div>
   </div>
 
@@ -1121,7 +1122,7 @@ binary = <span class="y">1</span> <span class="p">if</span> (len(f2p) &gt; 0 <sp
     <div>
       <h4><span class="chip c-hu">사람</span> 선택·실행</h4>
       <ul>
-        <li>어떤 에이전트를 쓸지</li>
+        <li>어떤 에이전트를 쓸지<br><span style="color:var(--tx3);font-size:.88em">mini-swe-agent · opencode · claude-code · 자체 제작</span></li>
         <li>어떤 모델을 쓸지</li>
         <li>API 키 준비</li>
         <li>어디서 실행할지<br>(<code>docker</code> / <code>modal</code>)</li>
@@ -1304,10 +1305,31 @@ cat jobs/*/*/verifier/reward.json</pre>
   <h3>왜 mini-swe-agent를 기준선으로 쓰나</h3>
   <p>
     스캐폴드가 얇을수록 <b style="color:var(--tx)">점수 ≈ 모델 실력</b>에 가까워집니다.
-    Claude Code처럼 자체 프롬프트·도구·컨텍스트 관리가 두꺼운 에이전트를 쓰면
+    Claude Code나 OpenCode처럼 자체 프롬프트·도구·컨텍스트 관리가 두꺼운 에이전트를 쓰면
     "모델이 잘한 건지 스캐폴드가 잘한 건지" 구분이 안 됩니다.
     mini-swe-agent는 <b>bash 도구 하나, 선형 히스토리, 상태 없는 실행</b>이라 약 100줄짜리 에이전트입니다.
   </p>
+
+  <h3>Pier가 지원하는 에이전트</h3>
+  <table>
+    <thead><tr><th style="width:170px">에이전트</th><th style="width:110px">성격</th><th>쓰는 경우</th></tr></thead>
+    <tbody>
+      <tr><td><code>nop</code></td><td><span class="chip">더미</span></td><td>아무것도 안 함. 채점기가 0을 제대로 주는지 확인</td></tr>
+      <tr><td><code>oracle</code></td><td><span class="chip">더미</span></td><td>모범답안 적용. 환경·채점기가 1을 주는지 확인</td></tr>
+      <tr><td><code>mini-swe-agent</code></td><td><span class="chip c-ag">얇음</span></td><td><b>기준선.</b> 모델 실력 측정 · 리더보드 표준</td></tr>
+      <tr><td><b><code>opencode</code></b></td><td><span class="chip c-pi">두꺼움</span></td><td><b>오픈소스</b> 본격 에이전트. 실사용 성능 · 스캐폴드 기여도 측정</td></tr>
+      <tr><td><code>claude-code</code></td><td><span class="chip c-pi">두꺼움</span></td><td>Anthropic 공식 CLI</td></tr>
+      <tr><td><code>codex</code> / <code>gemini-cli</code><br><code>cursor-cli</code> / <code>antigravity-sdk</code></td><td><span class="chip c-pi">두꺼움</span></td><td>각 벤더 CLI 에이전트</td></tr>
+      <tr><td><span style="color:var(--a3)">직접 만든 것</span></td><td><span class="chip c-hu">자유</span></td><td><code>--agent-import-path</code>로 연결 → <b>내 에이전트 만들기</b> 탭 참고</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note info">
+    <b>OpenCode가 특별한 이유 —</b> 두꺼운 에이전트 중 <b>유일하게 소스가 완전히 공개</b>돼 있습니다.
+    프롬프트·도구·컨텍스트 관리 로직을 직접 읽고 수정해 실험할 수 있어,
+    <b>"스캐폴드의 어떤 요소가 점수에 기여하는가"</b>를 파고들 수 있습니다.
+    자세한 내용은 <b>🧩 OpenCode 에이전트</b> 탭을 참고하세요.
+  </div>
 </div></section>
 
 <!-- ===================== 12 ===================== -->
@@ -1965,6 +1987,311 @@ pier critique run</pre>
 
 
 <!-- ============================================================ -->
+<!-- =================== PANE 4 : OPENCODE ====================== -->
+<!-- ============================================================ -->
+<div class="pane" id="pane-opencode">
+
+<section><div class="wrap">
+  <h2 style="margin-bottom:14px">🧩 OpenCode 에이전트로 평가하기</h2>
+  <p class="lead">
+    <a href="https://github.com/anomalyco/opencode" style="color:var(--a1)">OpenCode</a>는
+    <b>오픈소스 AI 코딩 에이전트</b>입니다 (터미널 UI + 데스크톱 앱).
+    Claude Code·Codex 같은 <b style="color:var(--tx)">본격 CLI 에이전트</b>이면서
+    소스가 공개돼 있어, DeepSWE에서 <b>"두꺼운 스캐폴드가 실제로 도움이 되는가"</b>를
+    측정하기 좋은 대상입니다.
+  </p>
+
+  <div class="grid g4">
+    <div class="card kpi"><div class="v" style="color:var(--a1)">MIT</div><div class="l">오픈소스</div></div>
+    <div class="card kpi"><div class="v" style="color:var(--a2)">TS</div><div class="l">TypeScript / Bun</div></div>
+    <div class="card kpi"><div class="v" style="color:var(--a3)">10+</div><div class="l">지원 provider</div></div>
+    <div class="card kpi"><div class="v" style="color:var(--a4)">내장</div><div class="l">Pier 지원 에이전트</div></div>
+  </div>
+
+  <div class="note info">
+    <b>Pier에 이미 내장돼 있습니다.</b> 별도 코드 작성 없이
+    <code>--agent opencode</code> 한 줄로 바로 돌릴 수 있습니다.
+    Pier가 지원하는 에이전트는 <code>nop</code>, <code>oracle</code>, <code>mini-swe-agent</code>,
+    <code>claude-code</code>, <code>codex</code>, <code>cursor-cli</code>,
+    <code>gemini-cli</code>, <code>antigravity-sdk</code>, <b><code>opencode</code></b> 입니다.
+  </div>
+
+  <!-- 1 -->
+  <h3 class="tut"><span class="stepnum">1</span>OpenCode란 — mini-swe-agent와 뭐가 다른가</h3>
+
+  <div class="split">
+    <div class="card" style="border-color:rgba(126,231,135,.35)">
+      <b>mini-swe-agent (기준선)</b>
+      <ul>
+        <li>도구: <b>bash 하나뿐</b></li>
+        <li>히스토리: 완전 선형, 압축 없음</li>
+        <li>실행: <code>subprocess.run</code> 무상태</li>
+        <li>코드: 약 100줄</li>
+        <li>목적: <b>모델 실력 측정</b></li>
+      </ul>
+    </div>
+    <div class="card" style="border-color:rgba(210,168,255,.4)">
+      <b>OpenCode (본격 에이전트)</b>
+      <ul>
+        <li>도구: 파일 편집·검색·LSP·MCP 등 <b>다수</b></li>
+        <li>세션·컨텍스트 관리 내장</li>
+        <li><b>서브에이전트</b> (<code>@general</code>) 위임</li>
+        <li>모드: <code>build</code>(전체 권한) / <code>plan</code>(읽기 전용)</li>
+        <li>목적: <b>실사용 성능</b></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>내장 에이전트 모드.</b> OpenCode는 <code>build</code>(기본, 전체 접근)와
+    <code>plan</code>(읽기 전용 · 편집 거부 · bash 실행 전 확인)을 <kbd>Tab</kbd>으로 전환합니다.
+    벤치마크에서는 당연히 <b><code>build</code> 모드로 완전 자동 실행</b>해야 합니다
+    (Pier가 <code>--dangerously-skip-permissions</code>를 붙여 처리).
+  </div>
+
+  <!-- 2 -->
+  <h3 class="tut"><span class="stepnum">2</span>가장 빠른 실행</h3>
+<pre>export ANTHROPIC_API_KEY=...
+
+pier run -p deep-swe/tasks/ts-pattern-match-each \
+  <span class="g">--agent opencode</span> \
+  --model <span class="g">anthropic/claude-opus-4-8</span> \
+  --env docker</pre>
+
+  <div class="note bad">
+    <b>모델 이름은 반드시 <code>provider/model</code> 형식</b>이어야 합니다.
+    Pier의 OpenCode 어댑터는 <code>"/"</code>가 없으면
+    <code>ValueError: Model name must be in the format provider/model_name</code>로 즉시 실패합니다.
+  </div>
+
+  <!-- 3 -->
+  <h3 class="tut"><span class="stepnum">3</span>Pier가 내부에서 하는 일</h3>
+  <p>다른 에이전트와 달리 OpenCode는 <b>컨테이너 안에 설치</b>된 뒤 CLI로 실행됩니다.</p>
+
+  <h4 style="margin:18px 0 8px;font-size:1rem">① 이미지 빌드 시 설치 (<code>install_spec</code>)</h4>
+<pre>nvm install <span class="y">22</span> && npm -v && \
+npm i -g <span class="g">opencode-ai@latest</span> && \
+opencode --version              <span class="c"># 설치 검증</span></pre>
+
+  <h4 style="margin:18px 0 8px;font-size:1rem">② 실행 직전 설정 파일 생성</h4>
+<pre>mkdir -p ~/.config/opencode
+echo '&lt;config&gt;' &gt; <span class="g">~/.config/opencode/opencode.json</span></pre>
+
+  <h4 style="margin:18px 0 8px;font-size:1rem">③ 에이전트 실행</h4>
+<pre>opencode --model=<span class="g">anthropic/claude-opus-4-8</span> run --format=json \
+  --thinking <span class="y">--dangerously-skip-permissions</span> -- <span class="g">"&lt;instruction.md 내용&gt;"</span> \
+  2&gt;&1 | tee <span class="g">/logs/agent/opencode.txt</span></pre>
+
+  <table>
+    <thead><tr><th style="width:230px">플래그 / 환경변수</th><th>역할</th></tr></thead>
+    <tbody>
+      <tr><td><code>run</code></td><td>대화형 TUI가 아닌 <b>일회성 배치 실행</b> 모드</td></tr>
+      <tr><td><code>--format=json</code></td><td>구조화 출력 → Pier가 ATIF v1.7 트라젝토리로 변환</td></tr>
+      <tr><td><code>--thinking</code></td><td>추론(thinking) 블록을 출력에 포함 → 트라젝토리 분석용</td></tr>
+      <tr><td><code>--dangerously-skip-permissions</code></td><td><b>권한 확인 프롬프트 비활성화.</b> 무인 실행이라 필수</td></tr>
+      <tr><td><code>OPENCODE_FAKE_VCS=git</code></td><td>Pier가 자동 설정. OpenCode의 VCS 통합이 채점용 git 상태를 건드리지 않도록 함</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note ok">
+    <b>커밋은 어떻게?</b> OpenCode도 <code>instruction.md</code> 마지막 줄
+    (<i>"work on a new branch ... and commit everything when you are done"</i>)을 읽고
+    <b>스스로 커밋합니다.</b> 별도 처리가 필요 없습니다.
+    다만 커밋 누락은 어떤 에이전트에서든 <code>reward 0</code>의 최대 원인이므로
+    <code>model.patch</code>가 비어있지 않은지 항상 확인하세요.
+  </div>
+
+  <!-- 4 -->
+  <h3 class="tut"><span class="stepnum">4</span>자체 모델 연결 — <code>opencode_config</code></h3>
+  <p>
+    OpenCode 내장 레지스트리에 없는 모델을 쓰려면 <b>provider 설정을 주입</b>해야 합니다.
+    Pier는 <code>kwargs.opencode_config</code>를 <code>opencode.json</code>에 <b>deep-merge</b>합니다.
+  </p>
+
+  <div class="note bad">
+    <b>⚠️ 가장 많이 틀리는 부분.</b> OpenCode는 base URL을 provider 루트가 아니라
+    <b><code>options.baseURL</code></b>에서 읽습니다. 위치가 틀리면 조용히 무시됩니다.
+<pre style="margin:10px 0 0">provider:
+  openai:
+    <span class="r">baseURL: ...</span>        <span class="c"># ❌ 무시됨</span>
+    <span class="g">options:
+      baseURL: ...</span>      <span class="c"># ✅ 올바른 위치</span></pre>
+  </div>
+
+  <div class="filepath">opencode-eval.yaml</div>
+<pre>job_name: opencode-eval
+n_concurrent_trials: <span class="y">4</span>
+
+datasets:
+  - path: ./deep-swe/tasks
+    n_tasks: <span class="y">20</span>
+    sample_seed: <span class="y">0</span>
+
+environment:
+  type: docker
+
+agents:
+  <span class="c"># ① 자체 OpenAI 호환 엔드포인트</span>
+  - name: opencode
+    model_name: <span class="g">openai/my-model-7b</span>
+    env:
+      OPENAI_API_KEY: ${MY_KEY}
+      OPENAI_BASE_URL: <span class="g">https://my-model.example.com/v1</span>
+    kwargs:
+      opencode_config:
+        provider:
+          openai:
+            <span class="g">options:
+              baseURL: https://my-model.example.com/v1</span>
+            models:
+              <span class="g">my-model-7b: {}</span>     <span class="c"># 미등록 모델 선언</span>
+
+  <span class="c"># ② 기준선 — 같은 모델, 얇은 스캐폴드</span>
+  - name: mini-swe-agent
+    model_name: <span class="g">openai/my-model-7b</span>
+    env:
+      OPENAI_API_KEY: ${MY_KEY}
+      OPENAI_BASE_URL: <span class="g">https://my-model.example.com/v1</span></pre>
+
+  <p style="font-size:.9rem">
+    <code>provider</code> 블록은 <code>model_name</code>이 <code>provider/model</code> 형식이면
+    Pier가 <b>일부 자동 생성</b>합니다. <code>opencode_config</code>는 그 위에 덮어쓰는 용도라,
+    미등록 모델 선언이나 커스텀 provider 추가에만 쓰면 됩니다.
+  </p>
+
+  <!-- 5 -->
+  <h3 class="tut"><span class="stepnum">5</span>네트워크 allowlist — 자동 처리</h3>
+  <p>
+    DeepSWE는 <code>no-network</code>인데 OpenCode는 <b>컨테이너 안에서</b> API를 호출합니다.
+    Pier는 <b>provider 설정에서 URL을 긁어</b> 자동으로 허용합니다.
+  </p>
+
+<pre><span class="c"># pier/agents/installed/opencode.py</span>
+<span class="p">def</span> <span class="b">network_allowlist</span>(self) -> NetworkAllowlist:
+    provider, _ = self.model_name.split(<span class="g">"/"</span>, <span class="y">1</span>)
+    config = self._build_runtime_config(include_mcp=<span class="y">False</span>)
+    provider_config = (config.get(<span class="g">"provider"</span>) or {}).get(provider) or {}
+    urls = collect_url_values(provider_config)      <span class="c"># ← 설정 속 URL 수집</span>
+    <span class="p">return</span> allowlist_from_urls(
+        urls,
+        default_domains=self._DEFAULT_PROVIDER_DOMAINS.get(provider, []))</pre>
+
+  <p>provider별 기본 허용 도메인:</p>
+<pre>anthropic  → api.anthropic.com        openai     → api.openai.com
+google     → .googleapis.com          openrouter → openrouter.ai
+groq       → api.groq.com             mistral    → api.mistral.ai
+deepseek   → api.deepseek.com         xai        → api.x.ai</pre>
+
+  <div class="note">
+    <b>커스텀 엔드포인트라면</b> <code>env.OPENAI_BASE_URL</code> 또는
+    <code>opencode_config.provider.*.options.baseURL</code>에 <b>반드시 명시</b>하세요.
+    적어두기만 하면 allowlist 등록은 자동입니다.
+    <br><span style="color:var(--a5)">※ <code>localhost</code>는 컨테이너 안에서 자기 자신이라 불가</span>
+  </div>
+
+  <!-- 6 -->
+  <h3 class="tut"><span class="stepnum">6</span>API 키 환경변수 — provider별</h3>
+  <p>Pier가 <code>model_name</code>의 provider를 보고 <b>필요한 키만 골라</b> 컨테이너로 전달합니다.</p>
+
+  <table>
+    <thead><tr><th style="width:170px">provider</th><th>전달되는 환경변수</th></tr></thead>
+    <tbody>
+      <tr><td><code>anthropic</code></td><td><code>ANTHROPIC_API_KEY</code></td></tr>
+      <tr><td><code>openai</code></td><td><code>OPENAI_API_KEY</code>, <code>OPENAI_BASE_URL</code></td></tr>
+      <tr><td><code>openrouter</code></td><td><code>OPENROUTER_API_KEY</code></td></tr>
+      <tr><td><code>google</code></td><td><code>GEMINI_API_KEY</code>, <code>GOOGLE_GENERATIVE_AI_API_KEY</code>, <code>GOOGLE_APPLICATION_CREDENTIALS</code>, <code>GOOGLE_CLOUD_PROJECT</code> 등</td></tr>
+      <tr><td><code>amazon-bedrock</code></td><td><code>AWS_ACCESS_KEY_ID</code>, <code>AWS_SECRET_ACCESS_KEY</code>, <code>AWS_REGION</code></td></tr>
+      <tr><td><code>azure</code></td><td><code>AZURE_RESOURCE_NAME</code>, <code>AZURE_API_KEY</code></td></tr>
+      <tr><td><code>github-copilot</code></td><td><code>GITHUB_TOKEN</code></td></tr>
+      <tr><td>기타</td><td><code>groq</code>, <code>deepseek</code>, <code>mistral</code>, <code>xai</code>, <code>huggingface</code>, <code>llama</code>, <code>opencode</code></td></tr>
+    </tbody>
+  </table>
+
+  <!-- 7 -->
+  <h3 class="tut"><span class="stepnum">7</span>MCP 서버 · 스킬 연동</h3>
+  <p>
+    OpenCode 어댑터는 태스크가 정의한 <b>MCP 서버</b>와 <b>스킬</b>을 자동 등록합니다.
+    이건 mini-swe-agent(bash만 사용)로는 불가능한 영역입니다.
+  </p>
+<pre><span class="c">// 자동 생성되는 ~/.config/opencode/opencode.json</span>
+{
+  <span class="b">"mcp"</span>: {
+    <span class="g">"my-stdio-server"</span>: { <span class="b">"type"</span>: <span class="g">"local"</span>,  <span class="b">"command"</span>: [<span class="g">"node"</span>, <span class="g">"srv.js"</span>] },
+    <span class="g">"my-http-server"</span>:  { <span class="b">"type"</span>: <span class="g">"remote"</span>, <span class="b">"url"</span>: <span class="g">"https://..."</span> }
+  },
+  <span class="b">"provider"</span>: { ... }
+}</pre>
+  <p style="font-size:.88rem;color:var(--tx3)">
+    ※ DeepSWE 113개 태스크는 <code>mcp_servers = []</code>이라 실제로는 사용되지 않습니다.
+    다른 Harbor 데이터셋이나 자체 태스크를 만들 때 유용합니다.
+  </p>
+
+  <!-- 8 -->
+  <h3 class="tut"><span class="stepnum">8</span>스캐폴드 비교 실험</h3>
+  <p>
+    OpenCode의 진짜 가치는 <b>"같은 모델인데 스캐폴드만 바꾸면 점수가 얼마나 달라지나"</b>를
+    측정하는 데 있습니다.
+  </p>
+
+  <div class="filepath">scaffold-ab.yaml</div>
+<pre>job_name: scaffold-comparison
+n_attempts: <span class="y">3</span>
+
+datasets:
+  - path: ./deep-swe/tasks
+    n_tasks: <span class="y">20</span>
+    sample_seed: <span class="y">0</span>          <span class="c">// 모든 조건이 같은 20개</span>
+
+agents:
+  - { name: <span class="g">mini-swe-agent</span>, model_name: anthropic/claude-opus-4-8,
+      env: { ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY} } }
+  - { name: <span class="g">opencode</span>,       model_name: anthropic/claude-opus-4-8,
+      env: { ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY} } }
+  - { name: <span class="g">claude-code</span>,    model_name: anthropic/claude-opus-4-8,
+      env: { ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY} } }</pre>
+
+  <div class="note info">
+    <b>흥미로운 참고 결과.</b> mini-swe-agent 저장소는
+    <i>"mini-swe-agent beats Claude Code and Codex on DeepSWE"</i>라고 밝히고 있습니다.
+    <b>두꺼운 스캐폴드가 항상 유리하지는 않다</b>는 뜻입니다.
+    도구가 많으면 모델이 오히려 헤매거나, 컨텍스트 관리가 정보를 잃을 수 있습니다.
+    직접 측정해볼 가치가 있는 지점입니다.
+  </div>
+
+  <!-- 9 -->
+  <h3 class="tut"><span class="stepnum">9</span>주의사항 체크리스트</h3>
+  <ul class="chk">
+    <li><b><code>provider/model</code> 형식 필수</b> — 아니면 즉시 <code>ValueError</code></li>
+    <li><b>baseURL 위치</b> — <code>options.baseURL</code>이어야 함. 루트에 두면 무시</li>
+    <li><b>설치 시간</b> — nvm + npm 설치가 이미지 빌드에 포함돼 첫 실행이 오래 걸림</li>
+    <li><b>타임아웃</b> — 도구가 많아 턴이 길어짐. <code>override_timeout_sec</code> 상향 검토</li>
+    <li><b>비용</b> — mini-swe-agent보다 컨텍스트·턴 수가 많아 <b>토큰 비용이 큼</b></li>
+    <li><b>커밋 확인</b> — <code>model.patch</code>가 비어있지 않은지 반드시 검증</li>
+    <li><b>에러 이벤트</b> — OpenCode가 error 이벤트를 뱉으면 Pier가 <code>NonZeroAgentExitCodeError</code>로 실패 처리</li>
+  </ul>
+
+  <!-- 요약 -->
+  <h3 class="tut"><span class="stepnum">≡</span>요약</h3>
+<pre><span class="y">1</span>  <span class="g">--agent opencode</span> — Pier 내장, 코드 작성 불필요
+<span class="y">2</span>  모델은 반드시 <span class="g">provider/model</span> 형식
+<span class="y">3</span>  커스텀 엔드포인트는 <span class="g">options.baseURL</span> 에 (루트 ❌)
+<span class="y">4</span>  allowlist 는 설정에서 자동 수집 — 명시만 하면 됨
+<span class="y">5</span>  Pier 가 설치·설정·실행·트라젝토리 변환까지 자동 처리
+<span class="y">6</span>  같은 모델로 <span class="g">mini-swe-agent vs opencode</span> 비교 →
+   <b>스캐폴드의 실제 기여도</b> 측정</pre>
+
+  <div class="note ok">
+    <b>언제 OpenCode를 쓰나?</b><br>
+    • <b>모델 실력</b>을 재고 싶다 → <code>mini-swe-agent</code> (얇은 스캐폴드)<br>
+    • <b>실사용 성능</b>을 재고 싶다 → <code>opencode</code> (실제 개발자가 쓰는 환경)<br>
+    • <b>스캐폴드 기여도</b>를 재고 싶다 → <b>둘 다 돌려서 비교</b>
+  </div>
+</div></section>
+
+</div><!-- /pane-opencode -->
+
+
+<!-- ============================================================ -->
 <!-- =================== PANE 4 : HEADROOM ====================== -->
 <!-- ============================================================ -->
 <div class="pane" id="pane-headroom">
@@ -2254,6 +2581,8 @@ http://&lt;host&gt;:8787</pre>
     <a href="https://github.com/datacurve-ai/deep-swe">deep-swe (데이터셋)</a> ·
     <a href="https://github.com/datacurve-ai/pier">pier (실행기)</a> ·
     <a href="https://github.com/SWE-agent/mini-swe-agent">mini-swe-agent (에이전트)</a> ·
+    <a href="https://github.com/anomalyco/opencode">opencode (오픈소스 코딩 에이전트)</a> ·
+    <a href="https://github.com/headroomlabs-ai/headroom">headroom (컨텍스트 압축)</a> ·
     <a href="https://www.harborframework.com/docs/tasks">Harbor 태스크 포맷</a>
   </div>
   <div style="margin-top:8px;color:var(--tx3)">
@@ -2286,7 +2615,7 @@ http://&lt;host&gt;:8787</pre>
   }
   tabs.forEach(t => t.addEventListener('click', () => show(t.dataset.pane, true)));
   const hash = location.hash.slice(1);
-  if (['concept','tutorial','model','headroom'].includes(hash)) show(hash, false);
+  if (['concept','tutorial','model','opencode','headroom'].includes(hash)) show(hash, false);
 </script>
 </body>
 </html>
