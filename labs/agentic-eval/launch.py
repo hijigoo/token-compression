@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import random
 import signal
 import socket
 import subprocess
@@ -34,6 +35,25 @@ import yaml
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 BASE_PORT = 8801
+
+# ─────────────────────────────────────────────────────────────
+# 벤치마크와 언어 -> 데이터셋 경로
+#
+# 실험 파일이 경로를 직접 쓰지 않게 한다. 손으로 쓰면 name 은 그대로 둔 채
+# path 만 바꾸는 실수가 나고, 그러면 한국어 결과가 영어 실행 폴더에 조용히
+# 덮인다. 에러도 나지 않아 나중에는 구분할 방법이 없다.
+# ─────────────────────────────────────────────────────────────
+BENCHMARKS = {
+    "deep-swe": {"root": "datasets/deep-swe", "tasks": "tasks"},
+}
+LANGS = ("en", "ko")
+
+
+def dataset_dir(benchmark: str, lang: str) -> Path:
+    """`en` 은 원본, 그 외 언어는 `<root>-<lang>` 을 쓴다."""
+    b = BENCHMARKS[benchmark]
+    root = b["root"] if lang == "en" else f"{b['root']}-{lang}"
+    return HERE / root / b["tasks"]
 
 # ─────────────────────────────────────────────────────────────
 # 벤치마크 전제조건. yaml 에 노출하지 않는다.
@@ -67,12 +87,37 @@ def info(msg: str) -> None:
 # 검증
 # ─────────────────────────────────────────────────────────────
 def validate(spec: dict) -> None:
-    for key in ("name", "model", "dataset", "arms"):
+    for key in ("name", "model", "benchmark", "dataset", "arms"):
         if key not in spec:
             die(f"실험 파일에 '{key}' 가 없습니다")
 
+    if spec["benchmark"] not in BENCHMARKS:
+        die(f"모르는 benchmark: {spec['benchmark']!r} "
+            f"(가능: {', '.join(BENCHMARKS)})")
+
+    langs = spec.get("langs", ["en"])
+    if not langs:
+        die("langs 가 비어 있습니다")
+    bad = [x for x in langs if x not in LANGS]
+    if bad:
+        die(f"모르는 langs: {bad} (가능: {', '.join(LANGS)})")
+    if len(set(langs)) != len(langs):
+        die(f"langs 에 중복이 있습니다: {langs}")
+
     ds = spec["dataset"]
-    if "sample_seed" not in ds:
+    if "path" in ds:
+        # 경로를 손으로 쓰면 name 은 그대로 둔 채 path 만 바꾸는 실수가 난다.
+        die("dataset.path 는 더 이상 쓰지 않습니다.\n"
+            "  benchmark 와 langs 로 지정하세요:\n"
+            "    benchmark: deep-swe\n"
+            "    langs: [en, ko]")
+    if "tasks" in ds:
+        if not ds["tasks"]:
+            die("dataset.tasks 가 비어 있습니다")
+        if "n_tasks" in ds or "sample_seed" in ds:
+            die("dataset.tasks 를 주셨으면 n_tasks·sample_seed 는 쓰지 않습니다.\n"
+                "  목록을 직접 지정하는 것이므로 뽑을 것이 없습니다.")
+    elif "sample_seed" not in ds:
         # 시드가 없으면 arm 마다 다른 태스크를 받아 비교 자체가 무의미해진다.
         die("dataset.sample_seed 가 없습니다. 시드가 없으면 arm 간 비교가 성립하지 않습니다.")
 
@@ -106,6 +151,73 @@ def validate(spec: dict) -> None:
     if not any(a["kind"] == "direct" for a in arms):
         print("\033[33m! 기준선(kind: direct) arm 이 없습니다. "
               "비교 기준이 없으면 절감률·손실을 해석할 수 없습니다.\033[0m")
+
+
+# ─────────────────────────────────────────────────────────────
+# 태스크 선정
+#
+# 언어별 풀 크기가 다르면 같은 시드를 줘도 다른 태스크가 뽑힌다. 영어는
+# 113건인데 한국어는 번역해 둔 것만 있기 때문이다. 그 상태로 돌리면 두
+# 언어가 서로 다른 문제를 푼 결과를 나란히 놓게 되는데, 표에서는 전혀
+# 드러나지 않는다.
+#
+# 그래서 여기서 **교집합을 구해 직접 뽑고**, 그 목록대로 실행 전용 트리를
+# 만든다. pier 에게는 정확히 그 태스크만 든 디렉터리를 준다. 샘플링이
+# 우리 손을 떠나지 않으므로 언어 간 짝이 어긋날 수가 없다.
+# ─────────────────────────────────────────────────────────────
+def pick_tasks(benchmark: str, langs: list[str],
+               n: int | None, seed: int | None,
+               explicit: list[str] | None = None) -> list[str]:
+    pools: dict[str, set[str]] = {}
+    for lang in langs:
+        d = dataset_dir(benchmark, lang)
+        if not d.is_dir():
+            hint = ("  ./setup.sh 를 실행하세요." if lang == "en" else
+                    f"  python translate.py stage -b {benchmark} 로 만드세요.")
+            die(f"{lang} 데이터셋이 없습니다: {d.relative_to(REPO)}\n{hint}")
+        pools[lang] = {x.name for x in d.iterdir() if x.is_dir()}
+        if not pools[lang]:
+            die(f"{lang} 데이터셋이 비어 있습니다: {d.relative_to(REPO)}")
+
+    shared = set.intersection(*pools.values())
+    if not shared:
+        die("모든 언어에 공통으로 있는 태스크가 없습니다.")
+
+    if explicit is not None:
+        missing = [t for t in explicit if t not in shared]
+        if missing:
+            die(f"모든 언어에 있지는 않은 태스크: {missing}\n"
+                f"  번역이 빠졌다면: "
+                f"python translate.py translate {' '.join(missing)} -b {benchmark}")
+        return list(explicit)
+
+    for lang in langs:
+        only = pools[lang] - shared
+        if only:
+            info(f"{lang} 에만 있는 태스크 {len(only)}건은 제외합니다 "
+                 f"(언어 간 짝을 맞추기 위해)")
+
+    if n > len(shared):
+        die(f"n_tasks={n} 인데 공통 태스크는 {len(shared)}건뿐입니다.\n"
+            f"  n_tasks 를 줄이시거나 번역을 늘리세요:\n"
+            f"    python translate.py translate <태스크> -b {benchmark}")
+
+    return random.Random(seed).sample(sorted(shared), n)
+
+
+def stage_run_tasks(dst: Path, benchmark: str, lang: str, tasks: list[str]) -> Path:
+    """실행에 쓸 태스크만 모은 트리를 만든다. 내용은 심볼릭 링크다.
+
+    복사하지 않는 이유는 두 가지다. 태스크 하나가 수십 KB 라 실행마다
+    복사하면 쌓이고, 무엇보다 복사본은 원본이 갱신돼도 조용히 그대로 남는다.
+    """
+    src = dataset_dir(benchmark, lang)
+    dst.mkdir(parents=True, exist_ok=True)
+    for t in tasks:
+        link = dst / t
+        if not link.exists():
+            link.symlink_to(os.path.relpath(src / t, dst))
+    return dst
 
 
 # ─────────────────────────────────────────────────────────────
@@ -191,7 +303,9 @@ def wait_healthy(port: int, proc: subprocess.Popen, name: str, timeout: float = 
 # ─────────────────────────────────────────────────────────────
 # pier 설정 생성
 # ─────────────────────────────────────────────────────────────
-def build_pier_config(spec: dict, arms: list[dict], public_host: str, upstream: str) -> dict:
+def build_pier_config(spec: dict, arms: list[dict], public_host: str,
+                      upstream: str, lang: str, task_dir: Path,
+                      n_tasks: int) -> dict:
     agents = []
     for arm in arms:
         if arm["kind"] == "direct":
@@ -209,10 +323,18 @@ def build_pier_config(spec: dict, arms: list[dict], public_host: str, upstream: 
         })
 
     ds = dict(spec["dataset"])
-    ds["path"] = str((HERE / ds["path"]).resolve()) if not str(ds["path"]).startswith("/") else ds["path"]
+    # 태스크 선정은 launch.py 가 이미 끝냈다. 트리에 뽑힌 것만 들어 있으므로
+    # 아래 키들은 pier 에게 넘길 필요가 없고, 모르는 키라 거부당할 수도 있다.
+    for k in ("tasks", "sample_seed"):
+        ds.pop(k, None)
+    ds["path"] = str(task_dir.resolve())
+    # 트리에 정확히 뽑힌 태스크만 있으므로 n 중 n 을 고르는 셈이다.
+    # 시드는 기록을 위해 남기지만 결과에 영향을 주지 않는다.
+    ds["n_tasks"] = n_tasks
 
     return {
-        "job_name": spec["name"],
+        # 실행 폴더가 언어별로 갈리지만, pier 로그에서도 구분되게 해 둔다.
+        "job_name": f"{spec['name']}-{lang}",
         "n_concurrent_trials": spec.get("n_concurrent_trials", 4),
         "n_attempts": spec.get("n_attempts", 3),
         "datasets": [ds],
@@ -250,9 +372,22 @@ def main() -> int:
                 "    PUBLIC_HOST=benchmark-host python launch.py <실험파일>"
             )
 
+    benchmark = spec["benchmark"]
+    langs = spec.get("langs", ["en"])
+    ds = spec["dataset"]
+    tasks = pick_tasks(
+        benchmark, langs,
+        int(ds["n_tasks"]) if "n_tasks" in ds else None,
+        int(ds["sample_seed"]) if "sample_seed" in ds else None,
+        explicit=ds.get("tasks"))
+
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    out_dir = REPO / "runs" / "agentic-eval" / spec["name"] / stamp
+    out_dir = REPO / "runs" / "agentic-eval" / benchmark / spec["name"] / stamp
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    info(f"{benchmark} · 언어 {'/'.join(langs)} · 태스크 {len(tasks)}건")
+    for t in tasks:
+        print(f"    {t}")
 
     arms = [dict(a) for a in spec["arms"]]
     taken: set[int] = set()
@@ -278,9 +413,32 @@ def main() -> int:
                 proc = next(pr for nm, pr in procs if nm == arm["name"])
                 wait_healthy(arm["port"], proc, arm["name"])
 
-        cfg = build_pier_config(spec, arms, public_host, args.upstream)
-        cfg_path = out_dir / "pier.yaml"
-        cfg_path.write_text(yaml.safe_dump(cfg, sort_keys=False, allow_unicode=True), encoding="utf-8")
+        cfg_paths = []
+        for lang in langs:
+            lang_dir = out_dir / lang
+            task_dir = stage_run_tasks(lang_dir / "tasks", benchmark, lang, tasks)
+            cfg = build_pier_config(spec, arms, public_host, args.upstream,
+                                    lang, task_dir, len(tasks))
+            cfg_path = lang_dir / "pier.yaml"
+            cfg_path.write_text(
+                yaml.safe_dump(cfg, sort_keys=False, allow_unicode=True),
+                encoding="utf-8")
+            cfg_paths.append((lang, cfg_path))
+
+        # 이 실행이 무슨 조건이었는지 한 파일로 남긴다. 폴더 이름만으로는
+        # 태스크 목록까지 알 수 없다.
+        (out_dir / "meta.json").write_text(json.dumps({
+            "experiment": spec["name"],
+            "benchmark": benchmark,
+            "langs": langs,
+            "model": spec["model"],
+            "agent": spec.get("agent", "mini-swe-agent"),
+            "n_attempts": spec.get("n_attempts", 3),
+            "sample_seed": ds.get("sample_seed"),
+            "task_source": "명시" if ds.get("tasks") else "시드 추출",
+            "tasks": tasks,
+            "started_at": stamp,
+        }, ensure_ascii=False, indent=2), encoding="utf-8")
 
         # arm 순서 -> base_url 매핑. analyze.py 가 결과를 arm 에 되돌릴 때 쓴다.
         (out_dir / "arms.json").write_text(
@@ -297,11 +455,12 @@ def main() -> int:
             args.experiment.read_text(encoding="utf-8"), encoding="utf-8")
 
         print()
-        info(f"설정 생성: {cfg_path}")
+        info(f"설정 생성: {out_dir.relative_to(REPO)}")
         for a in arms:
             print(f"    {a['name']:<24} {a['base_url']}")
         print()
-        print(f"  pier run --config {cfg_path}")
+        for lang, cfg_path in cfg_paths:
+            print(f"  [{lang}] pier run --config {cfg_path}")
         print()
         info(f"결과 분석:  python analyze.py {out_dir}")
 

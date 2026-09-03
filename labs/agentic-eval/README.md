@@ -74,11 +74,11 @@ python translate.py stage                     # datasets/deep-swe-ko/ 생성
 패치)는 **원본을 심볼릭 링크로 가리킵니다.** 복사하면 원본이 갱신될 때
 조용히 어긋납니다.
 
-그다음 실험 yaml 에서 경로만 바꾸시면 됩니다.
+그다음 실험 yaml 에서 언어를 추가하시면 됩니다. 경로는 쓰지 않습니다.
 
 ```yaml
-dataset:
-  path: ./datasets/deep-swe-ko/tasks
+benchmark: deep-swe
+langs: [en, ko]
 ```
 
 ### verify 를 건너뛰지 마세요
@@ -116,28 +116,49 @@ B(압축)    에이전트 ──▶ 프록시 ──▶ 모델 API
 
 ## 실행 방법
 
+**처음이시면 `smoke` 부터 돌려주세요.** 태스크 1개·시도 1회짜리라 파이프라인이
+끝까지 이어지는지만 봅니다. 여기서 baseline 이 실패하면 압축 실험은 볼 것도
+없습니다.
+
 ```bash
 ./setup.sh
 
 # arm 전부 기동 + pier 설정 생성 (프록시는 켜둔 채 대기합니다)
-PUBLIC_HOST=benchmark-host ./.venv/bin/python launch.py experiments/ratio-sweep.yaml
+PUBLIC_HOST=benchmark-host ./.venv/bin/python launch.py experiments/smoke.yaml
 
-# 다른 터미널에서
-pier run --config runs/agentic-eval/ratio-sweep/<시각>/pier.yaml
+# 다른 터미널에서 — 언어마다 한 번씩입니다
+pier run --config runs/agentic-eval/deep-swe/smoke/<시각>/en/pier.yaml
+pier run --config runs/agentic-eval/deep-swe/smoke/<시각>/ko/pier.yaml
 
 # 집계
-./.venv/bin/python analyze.py runs/agentic-eval/ratio-sweep/<시각> --jobs <pier jobs 경로>
+./.venv/bin/python analyze.py runs/agentic-eval/deep-swe/smoke/<시각> --jobs <pier jobs 경로>
 ```
 
 설정만 확인하고 싶으실 때는 `--dry-run`을 붙여주세요. 프록시를 띄우지 않고
-파일만 만듭니다.
+파일만 만듭니다. Docker 도 필요 없습니다.
+
+### 실행 폴더 구조
+
+```
+runs/agentic-eval/<벤치마크>/<실험>/<시각>/
+  meta.json              무슨 조건이었나 — 태스크 목록까지
+  arms.json              arm -> base_url 매핑
+  config.snapshot.yaml   실험 파일 원본
+  en/  pier.yaml  tasks/
+  ko/  pier.yaml  tasks/
+```
+
+`tasks/` 는 이번 실행에 쓸 태스크만 심볼릭 링크로 모은 것입니다. **왜 굳이
+만드나** — 다음 절을 봐주세요.
 
 ## 실험 파일 쓰는 법
 
 ```yaml
 name: my-experiment
+benchmark: deep-swe
+langs: [en, ko]        # 생략하면 [en]
 model: openai/gpt-5.5
-dataset: {path: ./datasets/deep-swe/tasks, n_tasks: 5, sample_seed: 0}
+dataset: {n_tasks: 5, sample_seed: 0}
 n_attempts: 3
 arms:
   - {name: baseline, kind: direct}                            # 압축 없음
@@ -153,6 +174,43 @@ arms:
 
 **기준선(`direct`) arm을 꼭 넣어주세요.** 비교 대상이 없으면 pass@1 숫자
 하나만으로는 좋은지 나쁜지 판단할 수 없습니다.
+
+### 태스크를 직접 고르실 수도 있습니다
+
+```yaml
+dataset:
+  tasks: [mashumaro-flattened-dataclass-fields]
+```
+
+이때는 `n_tasks`·`sample_seed` 를 쓰지 않습니다. 뽑을 것이 없기 때문입니다.
+특정 태스크를 재현하거나, `smoke` 처럼 가장 가벼운 것 하나만 돌릴 때 씁니다.
+
+### ⚠️ 경로를 직접 쓰지 않는 이유
+
+예전에는 `dataset.path` 에 데이터셋 경로를 적었습니다. 그러면 실험 파일을
+복사해 한국어판을 만들 때 **`name` 은 그대로 둔 채 `path` 만 고치는** 실수가
+납니다. 에러가 나지 않고, 한국어 결과가 영어 실행 폴더에 조용히 덮입니다.
+나중에 결과만 보면 어느 언어였는지 알 방법이 없습니다.
+
+지금은 `benchmark` 와 `langs` 만 적으면 `launch.py` 가 경로를 정하고, 실행
+폴더도 `<벤치마크>/<실험>/<시각>/<언어>/` 로 갈라 줍니다. 사람이 경로를 쓰지
+않으므로 어긋날 자리가 없습니다.
+
+### ⚠️ 언어별 태스크 짝이 어긋나는 문제
+
+더 조용한 함정이 하나 더 있었습니다. 영어 풀은 113건인데 한국어는 번역해 둔
+것만 있습니다. **풀 크기가 다르면 같은 시드를 줘도 다른 태스크가 뽑힙니다.**
+그대로 돌리면 두 언어가 서로 다른 문제를 푼 결과를 나란히 놓게 되는데,
+표에서는 전혀 드러나지 않습니다.
+
+그래서 `launch.py` 가 이렇게 합니다.
+
+1. 모든 언어에 **공통으로 있는 태스크**만 추립니다
+2. 거기서 시드로 뽑습니다 — 언어와 무관하게 같은 목록이 나옵니다
+3. 뽑힌 것만 모은 트리를 언어별로 만들어 pier 에게 줍니다
+
+3번까지 하는 이유는 샘플링을 우리 손에서 놓지 않기 위해서입니다. pier 에게
+"113건 중 5건 뽑아라" 라고 맡기면 언어별로 다시 어긋날 수 있습니다.
 
 ## 늘리는 방법
 

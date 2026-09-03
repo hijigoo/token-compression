@@ -10,11 +10,12 @@
 #    실측 절감률이 서로 다르면 정확도만 비교하는 건 무의미하다.
 
 name: lib-compare
+benchmark: deep-swe
+langs: [en, ko]        # 두 언어를 한 번에. 같은 태스크가 짝지어집니다
 model: openai/gpt-5.5
 agent: mini-swe-agent
 
 dataset:
-  path: ./datasets/deep-swe/tasks
   n_tasks: 5
   sample_seed: 0
 
