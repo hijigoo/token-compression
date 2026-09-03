@@ -1,0 +1,1050 @@
+{
+  "corpus": "sample",
+  "n_cases": 12,
+  "deployment": "gpt-5.4",
+  "results": [
+    {
+      "n": 12,
+      "correct": 12,
+      "wrong": 0,
+      "unknown": 0,
+      "accuracy": 1.0,
+      "hallucination": 0.0,
+      "abstain": 0.0,
+      "by_kind": {
+        "numeric": {
+          "n": 2,
+          "정답": 2,
+          "오답": 0,
+          "모름": 0
+        },
+        "negation": {
+          "n": 2,
+          "정답": 2,
+          "오답": 0,
+          "모름": 0
+        },
+        "identifier": {
+          "n": 2,
+          "정답": 2,
+          "오답": 0,
+          "모름": 0
+        },
+        "similar": {
+          "n": 2,
+          "정답": 2,
+          "오답": 0,
+          "모름": 0
+        },
+        "structured": {
+          "n": 2,
+          "정답": 2,
+          "오답": 0,
+          "모름": 0
+        },
+        "short": {
+          "n": 2,
+          "정답": 2,
+          "오답": 0,
+          "모름": 0
+        }
+      },
+      "lab": "00-baseline",
+      "config": "noop",
+      "rows": [
+        {
+          "id": "doc-001",
+          "kind": "numeric",
+          "verdict": "정답",
+          "answer": "환불 시 결제금액의 10%를 수수료로 공제하되, 결제 후 7일 이내 취소는 수수료를 면제한다.",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-002",
+          "kind": "numeric",
+          "verdict": "정답",
+          "answer": "3월 주문 총액은 32,450,000원이고 환불액은 1,280,500원입니다.",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-003",
+          "kind": "negation",
+          "verdict": "정답",
+          "answer": "심야 시간대(22시~06시)에는 시스템 점검으로 인해 환불 신청이 처리되지 않습니다.",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-004",
+          "kind": "negation",
+          "verdict": "정답",
+          "answer": "아니요, 법인 회원은 본 혜택을 적용받을 수 없습니다.",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-005",
+          "kind": "identifier",
+          "verdict": "정답",
+          "answer": "kt-tf-prod-eastus-aks-01, INC-2026-0314-77",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-006",
+          "kind": "identifier",
+          "verdict": "정답",
+          "answer": "A-1003, EMP-88213",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-007",
+          "kind": "similar",
+          "verdict": "정답",
+          "answer": "2026년 3분기 신규 가입자 수는 21,050명이었다.",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-008",
+          "kind": "similar",
+          "verdict": "정답",
+          "answer": "서울 지사 담당자는 최은지 팀장이며 연락처는 02-000-3333 입니다.",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-009",
+          "kind": "structured",
+          "verdict": "정답",
+          "answer": "/v1/rerank",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-010",
+          "kind": "structured",
+          "verdict": "정답",
+          "answer": "환불된 주문의 금액은 8000 KRW입니다.",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-011",
+          "kind": "short",
+          "verdict": "정답",
+          "answer": "결제완료입니다.",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-012",
+          "kind": "short",
+          "verdict": "정답",
+          "answer": "3월 20일 02시부터 04시까지입니다.",
+          "survival": 1.0,
+          "saved": 0.0
+        }
+      ],
+      "saved": 0.0,
+      "survival": 1.0
+    },
+    {
+      "n": 12,
+      "correct": 12,
+      "wrong": 0,
+      "unknown": 0,
+      "accuracy": 1.0,
+      "hallucination": 0.0,
+      "abstain": 0.0,
+      "by_kind": {
+        "numeric": {
+          "n": 2,
+          "정답": 2,
+          "오답": 0,
+          "모름": 0
+        },
+        "negation": {
+          "n": 2,
+          "정답": 2,
+          "오답": 0,
+          "모름": 0
+        },
+        "identifier": {
+          "n": 2,
+          "정답": 2,
+          "오답": 0,
+          "모름": 0
+        },
+        "similar": {
+          "n": 2,
+          "정답": 2,
+          "오답": 0,
+          "모름": 0
+        },
+        "structured": {
+          "n": 2,
+          "정답": 2,
+          "오답": 0,
+          "모름": 0
+        },
+        "short": {
+          "n": 2,
+          "정답": 2,
+          "오답": 0,
+          "모름": 0
+        }
+      },
+      "lab": "00-baseline",
+      "config": "noop-api",
+      "rows": [
+        {
+          "id": "doc-001",
+          "kind": "numeric",
+          "verdict": "정답",
+          "answer": "환불 시 결제금액의 10%를 수수료로 공제하되, 결제 후 7일 이내 취소는 수수료를 면제한다.",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-002",
+          "kind": "numeric",
+          "verdict": "정답",
+          "answer": "3월 주문 총액은 32,450,000원이고 환불액은 1,280,500원입니다.",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-003",
+          "kind": "negation",
+          "verdict": "정답",
+          "answer": "심야 시간대(22시~06시)에는 시스템 점검으로 인해 환불 신청이 처리되지 않습니다.",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-004",
+          "kind": "negation",
+          "verdict": "정답",
+          "answer": "아니요, 법인 회원은 본 혜택을 적용받을 수 없습니다.",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-005",
+          "kind": "identifier",
+          "verdict": "정답",
+          "answer": "kt-tf-prod-eastus-aks-01, INC-2026-0314-77",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-006",
+          "kind": "identifier",
+          "verdict": "정답",
+          "answer": "A-1003, EMP-88213",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-007",
+          "kind": "similar",
+          "verdict": "정답",
+          "answer": "2026년 3분기 신규 가입자 수는 21,050명이었다.",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-008",
+          "kind": "similar",
+          "verdict": "정답",
+          "answer": "서울 지사 담당자는 최은지 팀장이며 연락처는 02-000-3333 입니다.",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-009",
+          "kind": "structured",
+          "verdict": "정답",
+          "answer": "/v1/rerank",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-010",
+          "kind": "structured",
+          "verdict": "정답",
+          "answer": "환불된 주문의 금액은 8000 KRW입니다.",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-011",
+          "kind": "short",
+          "verdict": "정답",
+          "answer": "결제완료입니다.",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-012",
+          "kind": "short",
+          "verdict": "정답",
+          "answer": "3월 20일 02시부터 04시까지입니다.",
+          "survival": 1.0,
+          "saved": 0.0
+        }
+      ],
+      "saved": 0.0,
+      "survival": 1.0
+    },
+    {
+      "n": 12,
+      "correct": 12,
+      "wrong": 0,
+      "unknown": 0,
+      "accuracy": 1.0,
+      "hallucination": 0.0,
+      "abstain": 0.0,
+      "by_kind": {
+        "numeric": {
+          "n": 2,
+          "정답": 2,
+          "오답": 0,
+          "모름": 0
+        },
+        "negation": {
+          "n": 2,
+          "정답": 2,
+          "오답": 0,
+          "모름": 0
+        },
+        "identifier": {
+          "n": 2,
+          "정답": 2,
+          "오답": 0,
+          "모름": 0
+        },
+        "similar": {
+          "n": 2,
+          "정답": 2,
+          "오답": 0,
+          "모름": 0
+        },
+        "structured": {
+          "n": 2,
+          "정답": 2,
+          "오답": 0,
+          "모름": 0
+        },
+        "short": {
+          "n": 2,
+          "정답": 2,
+          "오답": 0,
+          "모름": 0
+        }
+      },
+      "lab": "00-baseline",
+      "config": "noop-local",
+      "rows": [
+        {
+          "id": "doc-001",
+          "kind": "numeric",
+          "verdict": "정답",
+          "answer": "환불 시 결제금액의 10%를 수수료로 공제하되, 결제 후 7일 이내 취소는 수수료를 면제한다.",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-002",
+          "kind": "numeric",
+          "verdict": "정답",
+          "answer": "3월 주문 총액은 32,450,000원이고 환불액은 1,280,500원입니다.",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-003",
+          "kind": "negation",
+          "verdict": "정답",
+          "answer": "심야 시간대(22시~06시)에는 시스템 점검으로 인해 환불 신청이 처리되지 않습니다.",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-004",
+          "kind": "negation",
+          "verdict": "정답",
+          "answer": "아니요, 법인 회원은 본 혜택을 적용받을 수 없습니다.",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-005",
+          "kind": "identifier",
+          "verdict": "정답",
+          "answer": "kt-tf-prod-eastus-aks-01, INC-2026-0314-77",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-006",
+          "kind": "identifier",
+          "verdict": "정답",
+          "answer": "A-1003, EMP-88213",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-007",
+          "kind": "similar",
+          "verdict": "정답",
+          "answer": "2026년 3분기 신규 가입자 수는 21,050명이었다.",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-008",
+          "kind": "similar",
+          "verdict": "정답",
+          "answer": "서울 지사 담당자는 최은지 팀장이며 연락처는 02-000-3333 입니다.",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-009",
+          "kind": "structured",
+          "verdict": "정답",
+          "answer": "/v1/rerank",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-010",
+          "kind": "structured",
+          "verdict": "정답",
+          "answer": "환불된 주문의 금액은 8000 KRW입니다.",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-011",
+          "kind": "short",
+          "verdict": "정답",
+          "answer": "결제완료입니다.",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-012",
+          "kind": "short",
+          "verdict": "정답",
+          "answer": "3월 20일 02시부터 04시까지입니다.",
+          "survival": 1.0,
+          "saved": 0.0
+        }
+      ],
+      "saved": 0.0,
+      "survival": 1.0
+    },
+    {
+      "n": 12,
+      "correct": 12,
+      "wrong": 0,
+      "unknown": 0,
+      "accuracy": 1.0,
+      "hallucination": 0.0,
+      "abstain": 0.0,
+      "by_kind": {
+        "numeric": {
+          "n": 2,
+          "정답": 2,
+          "오답": 0,
+          "모름": 0
+        },
+        "negation": {
+          "n": 2,
+          "정답": 2,
+          "오답": 0,
+          "모름": 0
+        },
+        "identifier": {
+          "n": 2,
+          "정답": 2,
+          "오답": 0,
+          "모름": 0
+        },
+        "similar": {
+          "n": 2,
+          "정답": 2,
+          "오답": 0,
+          "모름": 0
+        },
+        "structured": {
+          "n": 2,
+          "정답": 2,
+          "오답": 0,
+          "모름": 0
+        },
+        "short": {
+          "n": 2,
+          "정답": 2,
+          "오답": 0,
+          "모름": 0
+        }
+      },
+      "lab": "01-lossless-structure",
+      "config": "prose",
+      "rows": [
+        {
+          "id": "doc-001",
+          "kind": "numeric",
+          "verdict": "정답",
+          "answer": "환불 시 결제금액의 10%를 수수료로 공제하되, 결제 후 7일 이내 취소는 수수료를 면제한다.",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-002",
+          "kind": "numeric",
+          "verdict": "정답",
+          "answer": "3월 주문 총액은 32,450,000원이고 환불액은 1,280,500원입니다.",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-003",
+          "kind": "negation",
+          "verdict": "정답",
+          "answer": "심야 시간대(22시~06시)에는 시스템 점검으로 인해 환불 신청이 처리되지 않습니다.",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-004",
+          "kind": "negation",
+          "verdict": "정답",
+          "answer": "아니요, 법인 회원은 본 혜택을 적용받을 수 없습니다.",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-005",
+          "kind": "identifier",
+          "verdict": "정답",
+          "answer": "kt-tf-prod-eastus-aks-01, INC-2026-0314-77",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-006",
+          "kind": "identifier",
+          "verdict": "정답",
+          "answer": "A-1003, EMP-88213",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-007",
+          "kind": "similar",
+          "verdict": "정답",
+          "answer": "2026년 3분기 신규 가입자 수는 21,050명이었다.",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-008",
+          "kind": "similar",
+          "verdict": "정답",
+          "answer": "서울 지사 담당자는 최은지 팀장이며 연락처는 02-000-3333 입니다.",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-009",
+          "kind": "structured",
+          "verdict": "정답",
+          "answer": "/v1/rerank",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-010",
+          "kind": "structured",
+          "verdict": "정답",
+          "answer": "8000",
+          "survival": 1.0,
+          "saved": 0.102
+        },
+        {
+          "id": "doc-011",
+          "kind": "short",
+          "verdict": "정답",
+          "answer": "결제완료입니다.",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-012",
+          "kind": "short",
+          "verdict": "정답",
+          "answer": "3월 20일 02시부터 04시까지입니다.",
+          "survival": 1.0,
+          "saved": 0.0
+        }
+      ],
+      "saved": 0.008499999999999999,
+      "survival": 1.0
+    },
+    {
+      "n": 12,
+      "correct": 7,
+      "wrong": 1,
+      "unknown": 4,
+      "accuracy": 0.5833,
+      "hallucination": 0.0833,
+      "abstain": 0.3333,
+      "by_kind": {
+        "numeric": {
+          "n": 2,
+          "정답": 1,
+          "오답": 0,
+          "모름": 1
+        },
+        "negation": {
+          "n": 2,
+          "정답": 1,
+          "오답": 0,
+          "모름": 1
+        },
+        "identifier": {
+          "n": 2,
+          "정답": 0,
+          "오답": 1,
+          "모름": 1
+        },
+        "similar": {
+          "n": 2,
+          "정답": 1,
+          "오답": 0,
+          "모름": 1
+        },
+        "structured": {
+          "n": 2,
+          "정답": 2,
+          "오답": 0,
+          "모름": 0
+        },
+        "short": {
+          "n": 2,
+          "정답": 2,
+          "오답": 0,
+          "모름": 0
+        }
+      },
+      "lab": "02-handle-ref",
+      "config": "k1-short",
+      "rows": [
+        {
+          "id": "doc-001",
+          "kind": "numeric",
+          "verdict": "정답",
+          "answer": "환불 수수료율은 결제금액의 10%이고, 결제 후 7일 이내 취소는 수수료를 면제한다.",
+          "survival": 1.0,
+          "saved": 0.0932
+        },
+        {
+          "id": "doc-002",
+          "kind": "numeric",
+          "verdict": "모름",
+          "answer": "모름",
+          "survival": 0.5,
+          "saved": 0.1683
+        },
+        {
+          "id": "doc-003",
+          "kind": "negation",
+          "verdict": "모름",
+          "answer": "모름",
+          "survival": 1.0,
+          "saved": -0.0256
+        },
+        {
+          "id": "doc-004",
+          "kind": "negation",
+          "verdict": "정답",
+          "answer": "법인 회원 및 사업자 회원은 본 혜택을 적용받을 수 없습니다.",
+          "survival": 0.6667,
+          "saved": -0.2432
+        },
+        {
+          "id": "doc-005",
+          "kind": "identifier",
+          "verdict": "오답",
+          "answer": "kt-tf-prod-eastus-aks-01, INC-2026-0314",
+          "survival": 0.3333,
+          "saved": 0.0187
+        },
+        {
+          "id": "doc-006",
+          "kind": "identifier",
+          "verdict": "모름",
+          "answer": "모름",
+          "survival": 0.5,
+          "saved": 0.0556
+        },
+        {
+          "id": "doc-007",
+          "kind": "similar",
+          "verdict": "모름",
+          "answer": "모름",
+          "survival": 0.5,
+          "saved": 0.0492
+        },
+        {
+          "id": "doc-008",
+          "kind": "similar",
+          "verdict": "정답",
+          "answer": "최은지 팀장, 02-000-3333 입니다.",
+          "survival": 1.0,
+          "saved": 0.0792
+        },
+        {
+          "id": "doc-009",
+          "kind": "structured",
+          "verdict": "정답",
+          "answer": "/v1/rerank",
+          "survival": 1.0,
+          "saved": -0.0494
+        },
+        {
+          "id": "doc-010",
+          "kind": "structured",
+          "verdict": "정답",
+          "answer": "8000 KRW입니다.",
+          "survival": 1.0,
+          "saved": -0.0408
+        },
+        {
+          "id": "doc-011",
+          "kind": "short",
+          "verdict": "정답",
+          "answer": "결제완료입니다.",
+          "survival": 1.0,
+          "saved": -0.2
+        },
+        {
+          "id": "doc-012",
+          "kind": "short",
+          "verdict": "정답",
+          "answer": "3월 20일 02시부터 04시까지입니다.",
+          "survival": 1.0,
+          "saved": -0.1429
+        }
+      ],
+      "saved": -0.019808333333333334,
+      "survival": 0.7916666666666666
+    },
+    {
+      "n": 12,
+      "correct": 7,
+      "wrong": 0,
+      "unknown": 5,
+      "accuracy": 0.5833,
+      "hallucination": 0.0,
+      "abstain": 0.4167,
+      "by_kind": {
+        "numeric": {
+          "n": 2,
+          "정답": 2,
+          "오답": 0,
+          "모름": 0
+        },
+        "negation": {
+          "n": 2,
+          "정답": 1,
+          "오답": 0,
+          "모름": 1
+        },
+        "identifier": {
+          "n": 2,
+          "정답": 0,
+          "오답": 0,
+          "모름": 2
+        },
+        "similar": {
+          "n": 2,
+          "정답": 1,
+          "오답": 0,
+          "모름": 1
+        },
+        "structured": {
+          "n": 2,
+          "정답": 1,
+          "오답": 0,
+          "모름": 1
+        },
+        "short": {
+          "n": 2,
+          "정답": 2,
+          "오답": 0,
+          "모름": 0
+        }
+      },
+      "lab": "03-summarize-llm",
+      "config": "plain-short",
+      "rows": [
+        {
+          "id": "doc-001",
+          "kind": "numeric",
+          "verdict": "정답",
+          "answer": "환불수수료는 10%이며 7일 내 취소는 면제입니다.",
+          "survival": 1.0,
+          "saved": 0.678
+        },
+        {
+          "id": "doc-002",
+          "kind": "numeric",
+          "verdict": "정답",
+          "answer": "3월 주문 총액은 3,245만원이고 환불액은 128만500원입니다.",
+          "survival": 0.0,
+          "saved": 0.6139
+        },
+        {
+          "id": "doc-003",
+          "kind": "negation",
+          "verdict": "모름",
+          "answer": "모름",
+          "survival": 0.0,
+          "saved": 0.5641
+        },
+        {
+          "id": "doc-004",
+          "kind": "negation",
+          "verdict": "정답",
+          "answer": "아니요, 기존·법인·사업자는 제외입니다.",
+          "survival": 0.6667,
+          "saved": 0.6081
+        },
+        {
+          "id": "doc-005",
+          "kind": "identifier",
+          "verdict": "모름",
+          "answer": "모름",
+          "survival": 0.3333,
+          "saved": 0.6168
+        },
+        {
+          "id": "doc-006",
+          "kind": "identifier",
+          "verdict": "모름",
+          "answer": "모름",
+          "survival": 0.0,
+          "saved": 0.6204
+        },
+        {
+          "id": "doc-007",
+          "kind": "similar",
+          "verdict": "정답",
+          "answer": "2만1050명",
+          "survival": 0.5,
+          "saved": 0.7131
+        },
+        {
+          "id": "doc-008",
+          "kind": "similar",
+          "verdict": "모름",
+          "answer": "모름",
+          "survival": 0.0,
+          "saved": 0.7525
+        },
+        {
+          "id": "doc-009",
+          "kind": "structured",
+          "verdict": "정답",
+          "answer": "리랭크입니다.",
+          "survival": 0.0,
+          "saved": 0.6173
+        },
+        {
+          "id": "doc-010",
+          "kind": "structured",
+          "verdict": "모름",
+          "answer": "모름",
+          "survival": 0.0,
+          "saved": 0.5612
+        },
+        {
+          "id": "doc-011",
+          "kind": "short",
+          "verdict": "정답",
+          "answer": "결제완료",
+          "survival": 1.0,
+          "saved": 0.2
+        },
+        {
+          "id": "doc-012",
+          "kind": "short",
+          "verdict": "정답",
+          "answer": "02~04시",
+          "survival": 0.5,
+          "saved": 0.3214
+        }
+      ],
+      "saved": 0.5722333333333333,
+      "survival": 0.3333333333333333
+    },
+    {
+      "n": 12,
+      "correct": 11,
+      "wrong": 1,
+      "unknown": 0,
+      "accuracy": 0.9167,
+      "hallucination": 0.0833,
+      "abstain": 0.0,
+      "by_kind": {
+        "numeric": {
+          "n": 2,
+          "정답": 2,
+          "오답": 0,
+          "모름": 0
+        },
+        "negation": {
+          "n": 2,
+          "정답": 1,
+          "오답": 1,
+          "모름": 0
+        },
+        "identifier": {
+          "n": 2,
+          "정답": 2,
+          "오답": 0,
+          "모름": 0
+        },
+        "similar": {
+          "n": 2,
+          "정답": 2,
+          "오답": 0,
+          "모름": 0
+        },
+        "structured": {
+          "n": 2,
+          "정답": 2,
+          "오답": 0,
+          "모름": 0
+        },
+        "short": {
+          "n": 2,
+          "정답": 2,
+          "오답": 0,
+          "모름": 0
+        }
+      },
+      "lab": "03-summarize-llm",
+      "config": "preserve-short",
+      "rows": [
+        {
+          "id": "doc-001",
+          "kind": "numeric",
+          "verdict": "정답",
+          "answer": "환불 시 결제금액의 10%를 수수료로 공제하나, 결제 후 7일 이내 취소는 수수료를 면제한다.",
+          "survival": 1.0,
+          "saved": 0.6102
+        },
+        {
+          "id": "doc-002",
+          "kind": "numeric",
+          "verdict": "정답",
+          "answer": "3월 주문 총액 32,450,000원, 환불액 1,280,500원입니다.",
+          "survival": 1.0,
+          "saved": 0.703
+        },
+        {
+          "id": "doc-003",
+          "kind": "negation",
+          "verdict": "오답",
+          "answer": "환불 신청은 09시부터 18시까지 접수됩니다.",
+          "survival": 1.0,
+          "saved": 0.6026
+        },
+        {
+          "id": "doc-004",
+          "kind": "negation",
+          "verdict": "정답",
+          "answer": "법인 회원 및 사업자 회원은 본 혜택을 적용받을 수 없습니다.",
+          "survival": 0.3333,
+          "saved": 0.6622
+        },
+        {
+          "id": "doc-005",
+          "kind": "identifier",
+          "verdict": "정답",
+          "answer": "장애 리소스는 kt-tf-prod-eastus-aks-01, 티켓 번호는 INC-2026-0314-77 입니다.",
+          "survival": 0.6667,
+          "saved": 0.6449
+        },
+        {
+          "id": "doc-006",
+          "kind": "identifier",
+          "verdict": "정답",
+          "answer": "A-1003, EMP-88213.",
+          "survival": 1.0,
+          "saved": 0.75
+        },
+        {
+          "id": "doc-007",
+          "kind": "similar",
+          "verdict": "정답",
+          "answer": "21,050명입니다.",
+          "survival": 1.0,
+          "saved": 0.8115
+        },
+        {
+          "id": "doc-008",
+          "kind": "similar",
+          "verdict": "정답",
+          "answer": "서울 지사 담당자: 최은지 팀장, 연락처: 02-000-3333",
+          "survival": 1.0,
+          "saved": 0.7228
+        },
+        {
+          "id": "doc-009",
+          "kind": "structured",
+          "verdict": "정답",
+          "answer": "/v1/rerank(2400)입니다.",
+          "survival": 1.0,
+          "saved": 0.642
+        },
+        {
+          "id": "doc-010",
+          "kind": "structured",
+          "verdict": "정답",
+          "answer": "8000 KRW.",
+          "survival": 0.6667,
+          "saved": 0.7449
+        },
+        {
+          "id": "doc-011",
+          "kind": "short",
+          "verdict": "정답",
+          "answer": "결제완료입니다.",
+          "survival": 1.0,
+          "saved": 0.0
+        },
+        {
+          "id": "doc-012",
+          "kind": "short",
+          "verdict": "정답",
+          "answer": "3월 20일 02시부터 04시까지입니다.",
+          "survival": 1.0,
+          "saved": 0.25
+        }
+      ],
+      "saved": 0.5953416666666667,
+      "survival": 0.8888916666666667
+    }
+  ]
+}

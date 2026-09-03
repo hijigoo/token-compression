@@ -168,5 +168,13 @@ scratch/
 # --- labs ---
 labs/.env
 labs/kit/.cache/
-runs/
+labs/*/.cache/
 labs/runs/
+
+# 실행 결과는 전부 제외합니다. 위쪽 71~79행에 metrics.json 만 남기는
+# 규칙이 있었지만, 개발 중 실행이 쌓이면서 타임스탬프 폴더가 수십 개씩
+# 생겨 실제로는 잡음이 됐습니다.
+#
+# 남길 가치가 있는 결과는 compare/results/ 에 정리해서 커밋합니다.
+# 그쪽은 "무엇을 알아냈나" 단위라 실행 횟수와 무관하게 개수가 유지됩니다.
+runs/
