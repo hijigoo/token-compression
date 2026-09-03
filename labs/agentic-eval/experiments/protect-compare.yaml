@@ -1,0 +1,63 @@
+# 질문: 어디를 보호하느냐가 결과를 얼마나 바꾸는가?
+#
+# 압축기와 ratio 를 고정하고 **보호 범위만** 바꿉니다. 변수를 하나로 묶어야
+# "보호 덕분/탓" 을 읽을 수 있습니다.
+#
+#   PUBLIC_HOST=benchmark-host python launch.py experiments/protect-compare.yaml
+#
+# 왜 이걸 보나. MS 공유 문서에서 Headroom 을 돌렸을 때, 같은 압축률에서도
+# PROTECT_RECENT 를 2개로 둔 조건과 0개로 둔 조건의 결과가 갈렸습니다.
+# 우리 쪽 기본값(keep_last=2, min_chars=400)은 추론으로 정한 값이고 아직
+# 측정한 적이 없습니다. 이 실험이 그걸 확인합니다.
+
+name: protect-compare
+benchmark: deep-swe
+langs: [en, ko]
+model: openai/gpt-5.5
+agent: mini-swe-agent
+
+dataset:
+  tasks:
+    - aiomonitor-task-snapshots-diff
+    - etree-xml-diff-patch
+    - httpx-streaming-json-iteration
+    - mashumaro-flattened-dataclass-fields
+    - mnamer-daemon-watch-lifecycle
+    - opa-rego-rule-profiling
+    - updo-policy-alerting
+
+n_attempts: 3
+n_concurrent_trials: 4
+
+arms:
+  - name: baseline
+    kind: direct
+
+  # 기본 정책 — 지금 코드가 쓰는 값입니다
+  - name: v2-protect-default
+    kind: local
+    compressor: llmlingua
+    ratio: 0.5
+
+  # 최근 턴 보호를 끕니다. 직전 관측까지 압축 대상이 됩니다
+  - name: v2-protect-none
+    kind: local
+    compressor: llmlingua
+    ratio: 0.5
+    protect: {keep_last: 0}
+
+  # system 프롬프트까지 압축합니다. 출력 형식 계약이 들어 있어서
+  # 깨지면 파싱이 실패하고, 모델 성능과 무관하게 0점이 납니다.
+  # "그래서 보호한다" 를 수치로 보이려는 조건입니다
+  - name: v2-compress-system
+    kind: local
+    compressor: llmlingua
+    ratio: 0.5
+    protect: {system: true}
+
+  # 짧은 메시지까지 전부 압축합니다
+  - name: v2-no-min-chars
+    kind: local
+    compressor: llmlingua
+    ratio: 0.5
+    protect: {min_chars: 0}

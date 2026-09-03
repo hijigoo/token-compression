@@ -142,6 +142,14 @@ def validate(spec: dict) -> None:
                     f"[{arm['name']}] 이 플래그는 launch.py 가 관리합니다: {sorted(bad)}\n"
                     f"  --no-cache/--no-ccr 는 항상 강제되며 끌 수 없습니다."
                 )
+        bad = set(arm.get("protect") or {}) - PROTECT_KEYS
+        if bad:
+            die(f"[{arm.get('name')}] 모르는 protect 키: {sorted(bad)} "
+                f"(가능: {sorted(PROTECT_KEYS)})")
+        if arm.get("protect") and kind != "local":
+            die(f"[{arm.get('name')}] protect 는 local arm 에서만 씁니다.\n"
+                f"  headroom 은 자체 옵션(PROTECT_RECENT 등)을 args 로 받습니다.")
+
         if kind == "local":
             if "compressor" not in arm:
                 die(f"[{arm['name']}] local arm 에는 compressor 가 필요합니다")
@@ -225,6 +233,32 @@ def stage_run_tasks(dst: Path, benchmark: str, lang: str, tasks: list[str]) -> P
 
 
 # ─────────────────────────────────────────────────────────────
+# 보호 정책
+#
+# 무엇을 압축할지가 아니라 **어디를 건드리지 않을지** 를 정한다. 같은
+# 압축기로 보호 범위만 바꿔 비교하려고 arm 설정으로 열어 두었다.
+#
+#   protect: {keep_last: 0, system: true}   ← 공격적
+#   protect: {keep_last: 2}                 ← 기본값과 같음
+#
+# 값을 주지 않은 항목은 compressors 의 기본값을 따른다.
+# ─────────────────────────────────────────────────────────────
+PROTECT_KEYS = {"keep_last", "min_chars", "system"}
+
+
+def protect_args(protect: dict) -> list[str]:
+    out: list[str] = []
+    if "keep_last" in protect:
+        out += ["--keep-last", str(int(protect["keep_last"]))]
+    if "min_chars" in protect:
+        out += ["--min-chars", str(int(protect["min_chars"]))]
+    # system: true 는 "system 도 압축한다" 는 뜻이다. 기본은 보호다.
+    if protect.get("system"):
+        out += ["--compress-system"]
+    return out
+
+
+# ─────────────────────────────────────────────────────────────
 # 기동
 # ─────────────────────────────────────────────────────────────
 def spawn(arm: dict, port: int, upstream: str, stats_dir: Path) -> subprocess.Popen:
@@ -248,6 +282,7 @@ def spawn(arm: dict, port: int, upstream: str, stats_dir: Path) -> subprocess.Po
             "--upstream", upstream,
             "--arm", name,
             "--stats", str(stats_dir / f"{name}.jsonl"),
+            *protect_args(arm.get("protect") or {}),
         ]
 
     info(f"기동 [{name}] :{port}  {' '.join(cmd[:4])} …")
@@ -451,6 +486,7 @@ def main() -> int:
                 {"index": i, "name": a["name"], "kind": a["kind"],
                  "base_url": a["base_url"], "port": a.get("port"),
                  "ratio": a.get("ratio"), "compressor": a.get("compressor"),
+                 "protect": a.get("protect"),
                  "args": a.get("args")}
                 for i, a in enumerate(arms)
             ], ensure_ascii=False, indent=2), encoding="utf-8")

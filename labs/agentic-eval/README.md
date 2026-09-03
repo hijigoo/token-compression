@@ -272,6 +272,34 @@ arms:
 **기준선(`direct`) arm을 꼭 넣어주세요.** 비교 대상이 없으면 pass@1 숫자
 하나만으로는 좋은지 나쁜지 판단할 수 없습니다.
 
+### 무엇을 보호할지도 조건입니다
+
+압축기는 "어떻게 줄일까" 를 정하고, `protect` 는 **"어디를 건드리지 말까"**
+를 정합니다. 같은 압축기로 보호 범위만 바꿔 비교하실 수 있습니다.
+
+```yaml
+arms:
+  - {name: v2, kind: local, compressor: llmlingua, ratio: 0.5}
+  - {name: v2-aggressive, kind: local, compressor: llmlingua, ratio: 0.5,
+     protect: {keep_last: 0, system: true}}
+```
+
+| 키 | 기본 | 뜻 |
+|---|---|---|
+| `keep_last` | 2 | 마지막 N개 메시지를 원문 유지. 0 이면 보호 안 함 |
+| `min_chars` | 400 | 이보다 짧은 메시지는 건드리지 않음 |
+| `system` | (보호) | `true` 면 system 프롬프트도 압축합니다 |
+
+**기본값은 추론으로 정한 것이지 측정한 값이 아닙니다.** 직전 관측과 출력
+형식 계약이 깨지면 압축 품질과 무관하게 루프가 끊긴다는 판단이었습니다.
+
+MS 공유 문서에서 Headroom 을 돌렸을 때 `PROTECT_RECENT` 2개와 0개의 결과가
+갈렸습니다. 즉 **보호 범위가 결과를 가르는 변수**입니다.
+`experiments/protect-compare.yaml` 이 그걸 확인하는 실험입니다.
+
+> `protect` 는 `kind: local` 에서만 씁니다. Headroom 은 자체 옵션이 있어
+> `args` 로 넘기셔야 합니다.
+
 ### 태스크를 직접 고르실 수도 있습니다
 
 ```yaml

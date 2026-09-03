@@ -125,22 +125,52 @@ KEEP_LAST = 2
 """
 
 
+POLICY = {"min_chars": MIN_CHARS, "keep_last": KEEP_LAST, "skip_system": True}
+"""현재 보호 정책. proxy.py 가 arm 설정으로 덮어쓴다.
+
+압축기마다 인자를 늘리지 않고 여기 한 곳에 둔다. compress(messages, ratio)
+계약을 그대로 두려는 것이다 — 압축기는 "무엇을 어떻게 줄일까" 만 알면 되고,
+"어디를 건드려도 되나" 는 이 모듈이 정한다.
+"""
+
+
+def set_policy(**kw) -> dict:
+    """보호 정책을 바꾼다. 모르는 키는 거부한다.
+
+    오타를 조용히 무시하면 "보호를 껐다고 생각했는데 안 꺼진" 실험이
+    나오고, 결과만 봐서는 알아챌 수 없다.
+    """
+    unknown = set(kw) - set(POLICY)
+    if unknown:
+        raise KeyError(f"모르는 보호 정책 키: {sorted(unknown)} "
+                       f"(가능: {sorted(POLICY)})")
+    POLICY.update({k: v for k, v in kw.items() if v is not None})
+    return dict(POLICY)
+
+
 def apply_to_messages(
     messages: list[dict],
     fn: Callable[[str], str],
     *,
-    min_chars: int = MIN_CHARS,
-    keep_last: int = KEEP_LAST,
-    skip_system: bool = True,
+    min_chars: int | None = None,
+    keep_last: int | None = None,
+    skip_system: bool | None = None,
 ) -> list[dict]:
     """압축 대상 메시지만 골라 `fn` 을 적용한다.
+
+    인자를 주지 않으면 현재 POLICY 를 따른다.
 
     system 프롬프트는 기본으로 건드리지 않는다. mini-swe-agent 는 여기에
     출력 형식 계약(어떻게 bash 를 호출할지)을 넣는데, 이게 깨지면 파싱이
     실패해 모델 성능과 무관하게 trial 이 0점이 된다.
     """
+    min_chars = POLICY["min_chars"] if min_chars is None else min_chars
+    keep_last = POLICY["keep_last"] if keep_last is None else keep_last
+    skip_system = POLICY["skip_system"] if skip_system is None else skip_system
+
     out: list[dict] = []
-    last_idx = len(messages) - keep_last
+    # keep_last=0 이면 슬라이스 관례상 마지막이 아니라 전부가 걸린다.
+    last_idx = len(messages) - keep_last if keep_last > 0 else len(messages)
 
     for i, msg in enumerate(messages):
         content = msg.get("content")

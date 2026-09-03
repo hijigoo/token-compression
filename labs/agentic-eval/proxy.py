@@ -47,6 +47,7 @@ _stats_lock = threading.Lock()
 class Config:
     compressor_name = "none"
     ratio = 1.0
+    policy: dict = {}
     upstream = "https://api.openai.com"
     arm = "unnamed"
     stats_path: Path | None = None
@@ -82,6 +83,7 @@ class Handler(BaseHTTPRequestHandler):
                 "status": "ok",
                 "arm": Config.arm,
                 "compressor": Config.compressor_name,
+                "policy": Config.policy,
                 "ratio": Config.ratio,
             }).encode()
             self._respond(200, {"Content-Type": "application/json"}, body)
@@ -230,11 +232,32 @@ def main() -> int:
     p.add_argument("--arm", default="unnamed", help="실험 조건 이름 (로그 식별용)")
     p.add_argument("--stats", type=Path, default=None, help="통계 jsonl 경로")
     p.add_argument("--timeout", type=float, default=600.0)
+
+    # ── 보호 정책 ─────────────────────────────────────────────
+    # 무엇을 압축할지가 아니라 **어디를 건드리지 않을지** 를 정한다.
+    # 같은 압축기로 보호 범위만 바꿔 비교하려고 열어 두었다.
+    g = p.add_argument_group("보호 정책")
+    g.add_argument("--keep-last", type=int, default=None,
+                   help="마지막 N개 메시지를 원문 유지 (0 이면 보호 안 함)")
+    g.add_argument("--min-chars", type=int, default=None,
+                   help="이보다 짧은 메시지는 건드리지 않음")
+    g.add_argument("--compress-system", action="store_true",
+                   help="system 프롬프트도 압축 (기본은 보호)")
     args = p.parse_args()
 
     if not 0 < args.ratio <= 1:
         p.error(f"--ratio 는 (0, 1] 이어야 합니다: {args.ratio}")
+    if args.keep_last is not None and args.keep_last < 0:
+        p.error(f"--keep-last 는 0 이상이어야 합니다: {args.keep_last}")
+    if args.min_chars is not None and args.min_chars < 0:
+        p.error(f"--min-chars 는 0 이상이어야 합니다: {args.min_chars}")
 
+    policy = compressors.set_policy(
+        keep_last=args.keep_last,
+        min_chars=args.min_chars,
+        skip_system=False if args.compress_system else None)
+
+    Config.policy = policy
     Config.compressor_name = args.compressor
     Config.ratio = args.ratio
     Config.upstream = args.upstream
