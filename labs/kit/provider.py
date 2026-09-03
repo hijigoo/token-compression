@@ -20,7 +20,9 @@ import hashlib
 import json
 import os
 import shutil
+import socket
 import subprocess
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -66,6 +68,16 @@ def _headers() -> Dict[str, str]:
                            f"{r.stderr.strip()[:300]}")
     return {"Content-Type": "application/json",
             "Authorization": "Bearer " + json.loads(r.stdout)["accessToken"]}
+
+
+class ContentFiltered(RuntimeError):
+    """콘텐츠 필터에 걸려 이 텍스트는 잴 수 없습니다.
+
+    압축 결과가 깨져서 뜻 없는 글자열이 되면 필터가 반응하기도 합니다.
+    호출자가 이것만 따로 잡아 "이 케이스는 측정 못 했다" 로 처리할 수
+    있도록 별도 예외로 둡니다. 조용히 로컬 계산으로 바꾸면 한 실행 안에서
+    측정 방식이 섞여 합계가 뜻을 잃습니다.
+    """
 
 
 class ApiCounter:
@@ -116,25 +128,48 @@ class ApiCounter:
             self.hits += 1
             return self._mem[k]
 
-        req = urllib.request.Request(
-            f"{self.endpoint}/openai/v1/responses?api-version={self.api_version}",
-            data=json.dumps({"model": self.deployment, "input": text,
-                             "max_output_tokens": 16}).encode(),
-            headers=self._auth(), method="POST")
-        try:
-            with urllib.request.urlopen(req, timeout=180) as r:
-                d = json.loads(r.read().decode())
-        except urllib.error.HTTPError as e:
+        # 수백 번 부르다 보면 타임아웃이나 429 가 섞입니다. 한 번 실패했다고
+        # 전체를 멈추면 앞의 결과까지 버리게 되므로 몇 번 다시 시도합니다.
+        last = None
+        for attempt in range(4):
+            req = urllib.request.Request(
+                f"{self.endpoint}/openai/v1/responses?api-version={self.api_version}",
+                data=json.dumps({"model": self.deployment, "input": text,
+                                 "max_output_tokens": 16}).encode(),
+                headers=self._auth(), method="POST")
+            try:
+                with urllib.request.urlopen(req, timeout=120) as r:
+                    d = json.loads(r.read().decode())
+                break
+            except (TimeoutError, socket.timeout) as e:
+                last = e
+            except urllib.error.HTTPError as e:
+                if e.code in (429, 500, 502, 503, 504):
+                    last = e
+                else:
+                    body = e.read().decode("utf-8", "replace")
+                    if e.code == 400 and "content management policy" in body:
+                        raise ContentFiltered(
+                            "콘텐츠 필터에 걸려 이 텍스트는 재지 못했습니다. "
+                            "압축 결과가 심하게 깨지면 생길 수 있습니다.") from e
+                    raise RuntimeError(
+                        f"토큰 실측 실패 HTTP {e.code}: {body[:300]}") from e
+            except urllib.error.URLError as e:
+                if isinstance(getattr(e, "reason", None), (TimeoutError, socket.timeout)):
+                    last = e
+                else:
+                    raise RuntimeError(
+                        f"엔드포인트에 연결하지 못했습니다 ({e.reason}).\n"
+                        f"  대상: {_mask(self.endpoint)}\n"
+                        f"  .env 의 AZURE_OPENAI_ENDPOINT 를 확인해 주세요.\n"
+                        f"  네트워크 없이 돌리시려면 tokenizer.mode 를 local 로 "
+                        f"바꾸시면 됩니다.") from e
+            time.sleep(2 ** attempt)          # 1, 2, 4, 8초
+        else:
             raise RuntimeError(
-                f"토큰 실측 실패 HTTP {e.code}: {e.read().decode('utf-8','replace')[:300]}"
-            ) from e
-        except urllib.error.URLError as e:
-            raise RuntimeError(
-                f"엔드포인트에 연결하지 못했습니다 ({e.reason}).\n"
-                f"  대상: {_mask(self.endpoint)}\n"
-                f"  .env 의 AZURE_OPENAI_ENDPOINT 를 확인해 주세요.\n"
-                f"  네트워크 없이 돌리시려면 tokenizer.mode 를 local 로 바꾸시면 됩니다."
-            ) from e
+                f"토큰 실측을 {4}회 시도했지만 실패했습니다: "
+                f"{type(last).__name__}: {str(last)[:160]}") from last
+
 
         n = int((d.get("usage") or {}).get("input_tokens") or 0)
         self.calls += 1
