@@ -32,7 +32,7 @@ cd labs/01-lossless-structure && jupyter lab run.ipynb
 | [`01-lossless-structure`](labs/01-lossless-structure/) | 표현의 중복만 제거 | 28.5% | 100% | 없음 | 완료 |
 | [`02-handle-ref`](labs/02-handle-ref/) | 밖에 두고 핸들만 남김 | 50.9% | 100% | 없음 | 완료 |
 | [`03-summarize-llm`](labs/03-summarize-llm/) | LLM 추상 요약 | 89.2% | 100% | **API** | 완료 |
-| `04-llmlingua` | 토큰 프루닝 | — | — | torch | 예정 |
+| [`04-llmlingua`](labs/04-llmlingua/) | 토큰 프루닝 (3형제 · 한·영) | 46.3% | 0% | torch | 완료 |
 | `05-headroom` | CCR 라이브러리 | — | — | pip | 예정 |
 | `06-opencode` | 에이전트 세션 압축 | — | — | bun/npm | 예정 |
 
@@ -152,7 +152,8 @@ torch 핀이 걸리는 랩이 다른 랩과 충돌하지 않게 하려는 것입
 ### 코퍼스 만들기
 
 ```bash
-cd labs/data && python make_synthetic.py
+cd labs/data && python make_synthetic.py    # 한국어 3종
+cd labs/data && python make_bilingual.py    # 한·영 이중언어
 ```
 
 전부 합성 데이터라서 실제 고객 데이터가 섞일 여지가 없습니다.
@@ -162,6 +163,7 @@ cd labs/data && python make_synthetic.py
 | `sample` | 짧은 산문 12건 (숫자·부정·식별자가 밀집) | 전 랩 |
 | `sample-structured` | JSON·로그·표·XML 12건 | `01` |
 | `sample-long` | 7개 절 장문 8건, 정답은 한 절에만 | `02`, `03` |
+| `sample-bilingual` | 한·영 6쌍 12건. 같은 사실을 두 언어로 | `04` |
 
 ## 노트북을 커밋하기 전에
 
@@ -209,7 +211,8 @@ python scripts/strip_outputs.py labs/**/run.ipynb
 코퍼스를 아직 안 만드신 경우입니다.
 
 ```bash
-cd labs/data && python make_synthetic.py
+cd labs/data && python make_synthetic.py    # 한국어 3종
+cd labs/data && python make_bilingual.py    # 한·영 이중언어
 ```
 
 ### `AZURE_OPENAI_ENDPOINT 가 없습니다`

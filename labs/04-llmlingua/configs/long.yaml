@@ -1,0 +1,19 @@
+# LongLLMLingua — 질문을 주고 문단별 중요도를 함께 봅니다.
+# 셋 중 유일하게 질문을 씁니다. 02-handle-ref 의 라우팅과 같은 발상입니다.
+name: long
+lab: 04-llmlingua
+
+dataset:
+  path: ../../data/sample-bilingual
+
+model: gpt-5.4
+
+params:
+  variant: long
+  rate: 0.5
+  force_reserve_digit: true
+  # rank_method 와 condition_compare 는 어댑터가 기본으로 켭니다.
+
+tokenizer:
+  mode: both            # both(기본) | api | local
+  cache: true

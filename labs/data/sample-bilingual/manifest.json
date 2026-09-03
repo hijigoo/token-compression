@@ -1,0 +1,9 @@
+{
+  "name": "sample-bilingual",
+  "source": "합성 — labs/data/make_bilingual.py",
+  "revision": "v1",
+  "license": "저장소와 동일 (합성 데이터, 실제 고객 데이터 없음)",
+  "n_samples": 12,
+  "added_at": "2026-09-03",
+  "note": "한국어 6건 · 영어 6건. 같은 사실을 담은 쌍이며 meta.pair_id 로 묶여 있습니다. 토큰 프루닝의 언어별 성능 차이를 보려고 만들었습니다."
+}

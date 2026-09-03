@@ -1,0 +1,10 @@
+# 이 랩만 무거운 의존성을 씁니다. 루트 .venv 와 섞이지 않게 격리합니다.
+#
+#   cd labs/04-llmlingua
+#   uv venv .venv && uv pip install --python .venv/bin/python -r requirements.txt
+#
+# 모델은 처음 실행할 때 ~/.cache/huggingface/ 로 내려받습니다.
+#   v2       약 700MB  (다국어 BERT)
+#   v1/long  약 1GB    (Qwen2.5-0.5B)
+llmlingua
+-r ../kit/requirements.txt

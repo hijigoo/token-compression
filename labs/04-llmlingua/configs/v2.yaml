@@ -1,0 +1,19 @@
+# LLMLingua-2 — 분류 모델이 토큰마다 남길지 판정합니다.
+# 셋 중 가장 빠르고, 다국어 모델이 있어 한국어도 다룹니다.
+name: v2
+lab: 04-llmlingua
+
+dataset:
+  path: ../../data/sample-bilingual
+
+model: gpt-5.4
+
+params:
+  variant: v2
+  rate: 0.5                 # 남길 비율. ratio 가 아니라 rate 입니다
+  force_reserve_digit: true # 숫자를 지키려는 옵션 (완벽하지는 않습니다)
+  force_tokens: ["\n", "?"]
+
+tokenizer:
+  mode: both            # both(기본) | api | local
+  cache: true

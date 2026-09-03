@@ -95,7 +95,9 @@ labs/data/**
 !labs/data/sample/**
 !labs/data/sample-structured/**
 !labs/data/sample-long/**
+!labs/data/sample-bilingual/**
 !labs/data/make_synthetic.py
+!labs/data/make_bilingual.py
 
 # ─────────────────────────────────────────────────────────────
 # DeepSWE 데이터셋 (labs/agentic-eval/)

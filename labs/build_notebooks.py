@@ -1510,10 +1510,127 @@ if len(short) == 2:
     ])
 
 
+# ══════════════════════════════════════════════════════════════════
+# 04-llmlingua
+# ══════════════════════════════════════════════════════════════════
+
+def nb_04() -> dict:
+    return notebook([
+        md("""
+# 04-llmlingua — 작은 모델이 토큰을 골라 버립니다
+
+앞선 랩들과 판단 주체가 다릅니다.
+
+| 랩 | 누가 판단하나 | 언어 영향 |
+|---|---|---|
+| `01` 무손실 | 규칙 | 없음 |
+| `02` 참조핸들 | 겹침 점수 | 적음 |
+| `03` 요약 | **큰 모델**이 다시 씁니다 | 적음 |
+| **`04`** 프루닝 | **작은 모델**이 토큰마다 판정합니다 | **큽니다** |
+
+중요도를 매기는 모델이 작아서, 그 모델이 약한 언어에서는 성능이 떨어집니다.
+그래서 이 랩만 **한·영 이중언어 코퍼스**를 씁니다.
+
+> **결론을 미리 말씀드리면** — 세 변형 중 `v2` 만 쓸 만했고,
+> 같은 설정에서 **한국어가 영어보다 먼저 무너집니다.**
+
+## ⚠️ 처음 실행은 오래 걸립니다
+
+모델을 내려받습니다. `v2` 약 700MB, `v1`/`long` 약 1GB 입니다.
+이 랩은 **전용 가상환경**을 쓰므로 커널을 `labs/04-llmlingua/.venv` 로
+잡아주세요.
+"""),
+        md("## 1. kit 과 어댑터 불러오기"),
+        code(BOOTSTRAP + '\nimport lingua as L\nfrom compress import compress\nfrom kit.metrics import survival\n\ntable(\n    ["변형", "무엇이 다른가", "필요한 것"],\n    [["v1", "토큰별 정보량으로 프루닝", "인과 LM"],\n     ["long", "질문을 주고 문단별 중요도를 함께 봄", "인과 LM + 질문"],\n     ["v2", "분류 모델이 토큰을 남길지 판정", "전용 인코더"]],\n    align=["left", "left", "left"],\n    title="LLMLingua 3형제 — 같은 클래스, 다른 파라미터",\n    note="논문은 v1/long 에 7B 를 썼습니다. 여기서는 0.5B 를 쓰므로 "\n         "그만큼 결과가 나쁩니다. 아래에서 그 영향을 직접 봅니다.",\n)\nfor k, v in L.DEFAULT_MODEL.items():\n    print(f"  {k:5s} {v}")\n'),
+
+        md("""
+## 2. 코퍼스 — 같은 사실을 한국어와 영어로
+
+번역이 아니라 **같은 사실을 담은 쌍**입니다. `pair_id` 로 묶여 있어
+언어별 차이를 케이스 단위로 볼 수 있습니다.
+"""),
+        code('\ncases = dataset.load("../data/sample-bilingual")\ncounter = T.make_counter({"mode": "local"}, "gpt-5.4")\n\nko = [c for c in cases if c.meta["lang"] == "ko"]\nen = [c for c in cases if c.meta["lang"] == "en"]\n\ntable(\n    ["언어", "건수", "문자", "토큰", "문자당 토큰"],\n    [[lg, len(xs), f"{sum(len(c.text) for c in xs):,}",\n      f"{sum(counter(c.text) for c in xs):,}",\n      f"{sum(counter(c.text) for c in xs) / sum(len(c.text) for c in xs):.2f}"]\n     for lg, xs in [("한국어", ko), ("영어", en)]],\n    align=["left", "right", "right", "right", "right"],\n    title="이중언어 코퍼스",\n    note="같은 내용인데 한국어가 문자당 토큰을 더 씁니다. 압축이 더 절실한 "\n         "쪽인데, 아래에서 보시면 품질은 더 나쁩니다.",\n)\n\nc = ko[0]\nprint(f"[{c.id}] {c.question}")\nprint(f"  {c.text[:70]}…")\nprint(f"  정답 문자열 {c.must_include}")\n'),
+
+        md("""
+## 3. 세 변형이 같은 문장을 어떻게 다루나
+
+한 케이스에 셋을 다 걸어 봅니다. **처음 실행하면 모델 세 개를 받느라
+몇 분 걸립니다.**
+"""),
+        code('\nprobe = [c for c in cases if c.id == "en-01"][0]\nprint("원문:", probe.text[:100], "…")\nprint()\n\nrows = []\nfor v in ["v1", "long", "v2"]:\n    out, meta = compress(probe.text, question=probe.question, variant=v,\n                         rate=0.5, force_reserve_digit=True)\n    rows.append([v, f"{counter(probe.text)} → {counter(out)}",\n                 pct(1 - counter(out) / counter(probe.text)),\n                 pct(survival(out, probe.must_include)),\n                 out[:52].replace(chr(10), " ")])\n    print(f"  {v} 완료", flush=True)\n\ntable(\n    ["변형", "토큰", "절감", "보존율", "결과 앞부분"],\n    rows,\n    align=["left", "right", "right", "right", "left"],\n    title=f"{probe.id} · 질문: {probe.question}",\n    note="v1/long 은 숫자 중간이 잘립니다. 토큰 단위로 자르기 때문입니다.",\n)\n'),
+
+        md("""
+`v1` 과 `long` 의 결과를 보시면 `32,450,000` 이 `32,450,00RW` 처럼
+**숫자 중간에서 잘립니다.** 토큰 단위로 버리기 때문입니다.
+
+`v2` 가 안전한 이유는 분류 모델이 단어에 가까운 단위로 판정해서 숫자를
+통째로 남기기 때문입니다.
+
+> 이건 **작은 모델을 써서** 생기는 문제입니다. "LongLLMLingua 가 나쁘다"
+> 가 아니라 "작은 순위 모델로는 못 쓴다" 로 읽어주세요.
+"""),
+
+        md("""
+## 4. 조용히 무시되는 인자 — 이 랩에서 가장 조심할 부분
+
+`use_llmlingua2=True` 인 압축기에 `question` 이나 `rank_method` 를 넘기면
+**에러 없이 무시됩니다.** LongLLMLingua 설정을 v2 에 잘못 붙여도 그냥
+돌아가고 결과만 v2 그대로입니다.
+
+숫자가 안 바뀌는 이유를 찾느라 시간을 버리기 쉬워서, 어댑터가 거부합니다.
+"""),
+        code('\ntry:\n    L.check_params("v2", {"rate": 0.5, "question": "환불 수수료는?",\n                          "rank_method": "longllmlingua"})\n    print("통과 — 이러면 안 됩니다")\nexcept ValueError as e:\n    print("거부됨")\n    print()\n    print(e)\n'),
+
+        md(ALL_CONFIGS_MD.format(n=5, lab="04-llmlingua") + """
+| 설정 | 무엇을 보려고 |
+|---|---|
+| `v2` | 이 랩의 권장 조건 |
+| `v1` | 질문 없이 토큰 정보량만 |
+| `long` | 질문을 주면 나아지나 |
+| `v2-noop` | `rate=1.0` **자가 점검** |
+
+`v2-noop` 이 중요합니다. 아무것도 안 버리는 설정인데 **토큰이 늘어납니다.**
+"""),
+        code('\ndef run_config(path):\n    cfg = C.load(path)\n    cs = dataset.load(cfg.dataset["path"], limit=cfg.dataset.get("limit"))\n    cnt = T.make_counter({"mode": "local"}, cfg.model)\n    params = dict(cfg.params)\n    variant = params.pop("variant", "v2")\n    params.pop("model_name", None)\n\n    run = Run(cfg, RUNS)\n    for x in cs:\n        after, extra = compress(x.text, question=x.question or "",\n                                variant=variant, **params)\n        extra["lang"] = x.meta.get("lang", "-")\n        run.add(metrics.per_case(x.id, x.kind, x.text, after,\n                                 x.must_include, cnt, extra),\n                before=x.text, after=after)\n\n    m = metrics.aggregate(run.records, cnt)\n    m["variant"] = variant\n    m["rate"] = params.get("rate")\n    for lg in ("ko", "en"):\n        xs = [r for r in run.records if r["lang"] == lg]\n        if xs:\n            m[f"surv_{lg}"] = sum(r["survival"] for r in xs) / len(xs)\n    return cfg, m, run.finish(m, [f"변형 {variant}"])\n\n\nresults = []\nfor p in sorted(Path("configs").glob("*.yaml")):\n    cfg, m, out = run_config(p)\n    results.append((cfg.name, m, out))\n    print(f\'{cfg.name:10s} rate={m["rate"]} · 절감 {m["saved"]:6.1%} · \'\n          f\'보존 {m["survival_mean"]:6.1%}\', flush=True)\n'),
+
+        md(COMPARE_MD.format(n=6)),
+        code('\ntable(\n    ["설정", "변형", "rate", "절감", "보존율", "한국어", "영어"],\n    [[n, m["variant"], m["rate"], pct(m["saved"]), pct(m["survival_mean"]),\n      pct(m.get("surv_ko")), pct(m.get("surv_en"))]\n     for n, m, _ in results],\n    align=["left", "left", "right", "right", "right", "right", "right"],\n    title="조건 비교",\n    note="같은 설정인데 언어별로 다릅니다. 그게 이 랩의 핵심입니다.",\n)\n\nby = {n: m for n, m, _ in results}\nif "v2-noop" in by:\n    m = by["v2-noop"]\n    print(f\'v2-noop: rate=1.0 인데 절감 {m["saved"]:.1%} · \'\n          f\'보존율 {m["survival_mean"]:.1%}\')\n    print("아무것도 안 버렸는데 토큰이 늘었습니다. 토큰에서 텍스트를 다시")\n    print("만들면서 \'32,450,000\' 이 \'32, 450, 000\' 처럼 벌어지기 때문입니다.")\nif "v2" in by and "long" in by:\n    print()\n    print(f\'v2 보존 {by["v2"]["survival_mean"]:.1%} vs \'\n          f\'long 보존 {by["long"]["survival_mean"]:.1%} — \'\n          f\'질문을 주는 long 이 오히려 나쁩니다.\')\n    print("작은 모델로 토큰 단위 프루닝을 하면 숫자가 조각나기 때문입니다.")\n'),
+
+        md("""
+## 7. 압축률 스윕 — 어디서 무너지나
+
+`rate` 는 **남길 비율**입니다. 낮출수록 많이 버립니다.
+언어별로 무너지는 지점이 다른지 봅니다.
+"""),
+        code('\nrows = []\nfor rate in [0.9, 0.7, 0.5, 0.3]:\n    recs = []\n    for x in cases:\n        out, meta = compress(x.text, variant="v2", rate=rate,\n                             force_reserve_digit=True)\n        recs.append({"lang": x.meta["lang"],\n                     "s": survival(out, x.must_include),\n                     "tb": counter(x.text), "ta": counter(out)})\n    tb = sum(r["tb"] for r in recs)\n    ta = sum(r["ta"] for r in recs)\n    g = {lg: [r["s"] for r in recs if r["lang"] == lg] for lg in ("ko", "en")}\n    rows.append([rate, pct(1 - ta / tb),\n                 pct(sum(r["s"] for r in recs) / len(recs)),\n                 pct(min(r["s"] for r in recs)),\n                 pct(sum(g["ko"]) / len(g["ko"])),\n                 pct(sum(g["en"]) / len(g["en"]))])\n    print(f"  rate={rate} 완료", flush=True)\n\ntable(\n    ["rate", "절감", "보존 평균", "보존 최저", "한국어", "영어"],\n    rows,\n    align=["right"] * 6,\n    title="압축률 스윕 (v2)",\n    note="rate 0.7 을 보세요. 영어는 아직 멀쩡한데 한국어는 이미 무너집니다.",\n)\n'),
+
+        md("""
+## 정리
+
+- **세 변형 중 `v2` 만 쓸 만했습니다** — 작은 모델로 토큰 단위 프루닝을 하면
+  숫자와 식별자가 조각납니다
+- **한국어가 영어보다 먼저 무너집니다** — 같은 `rate` 에서 영어가 91.7% 일 때
+  한국어는 66.7% 였습니다
+- **한국어는 애초에 토큰을 더 씁니다** — 문자당 1.8배. 압축이 더 절실한데
+  품질은 더 나쁩니다
+- **`rate=1.0` 이 무손실이 아닙니다** — 토큰에서 텍스트를 재구성하면서
+  숫자 서식이 벌어져 오히려 늘어납니다
+- **숫자·식별자가 답인 문서에는 쓰지 마세요**
+
+### 결론을 일반화하지 마세요
+
+이 랩은 **0.5B 모델**로 돌립니다. 논문은 7B 를 썼습니다.
+"LongLLMLingua 가 나쁘다" 가 아니라 **"작은 순위 모델로는 못 쓴다"** 입니다.
+`configs/*.yaml` 의 `model_name` 으로 바꾸실 수 있습니다.
+"""),
+    ])
+
+
 BUILDERS = {"00": ("00-baseline", nb_00),
             "01": ("01-lossless-structure", nb_01),
             "02": ("02-handle-ref", nb_02),
-            "03": ("03-summarize-llm", nb_03)}
+            "03": ("03-summarize-llm", nb_03),
+            "04": ("04-llmlingua", nb_04)}
 
 
 def main(argv: list) -> int:

@@ -1,0 +1,17 @@
+# rate=1.0 — 아무것도 버리지 않습니다. 어댑터 자가 점검용입니다.
+# 절감 0% · 보존율 100% 가 아니면 어댑터가 원문을 건드리는 것입니다.
+name: v2-noop
+lab: 04-llmlingua
+
+dataset:
+  path: ../../data/sample-bilingual
+
+model: gpt-5.4
+
+params:
+  variant: v2
+  rate: 1.0
+
+tokenizer:
+  mode: both            # both(기본) | api | local
+  cache: true

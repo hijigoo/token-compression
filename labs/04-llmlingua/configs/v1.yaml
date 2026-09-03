@@ -1,0 +1,18 @@
+# LLMLingua v1 — 인과 LM 의 토큰별 정보량으로 프루닝합니다.
+# 질문을 쓰지 않아서 무엇을 남길지 판단할 근거가 약합니다.
+name: v1
+lab: 04-llmlingua
+
+dataset:
+  path: ../../data/sample-bilingual
+
+model: gpt-5.4
+
+params:
+  variant: v1
+  rate: 0.5
+  force_reserve_digit: true
+
+tokenizer:
+  mode: both            # both(기본) | api | local
+  cache: true
