@@ -1,0 +1,105 @@
+{
+ "generated_at": "2026-09-03 23:49:51",
+ "compressor": "llmlingua (LLMLingua-2 · xlm-roberta-large)",
+ "policy": "keep_last=0 · min_chars=0 · skip_system=False (압축기 자체만 보이려고 정책을 껐습니다)",
+ "rates": [
+  0.7,
+  0.5,
+  0.3
+ ],
+ "cases": [
+  {
+   "id": "tool-output",
+   "label": "도구 출력 (명령 실행 결과)",
+   "why": "에이전트 컨텍스트에서 가장 빠르게 증가하는 영역이며, 압축 효과가 가장 크게 나타나는 구간입니다.",
+   "role": "tool",
+   "before": "$ pytest tests/ -v\n============================= test session starts ==============================\nplatform linux -- Python 3.11.4, pytest-8.4.1, pluggy-1.6.0\nrootdir: /app\nplugins: asyncio-0.23.5, cov-4.1.0\ncollected 14 items\n\ntests/test_parser.py::test_parse_header PASSED                           [  7%]\ntests/test_parser.py::test_parse_body PASSED                             [ 14%]\ntests/test_parser.py::test_parse_empty PASSED                            [ 21%]\ntests/test_auth.py::test_login_ok PASSED                                 [ 28%]\ntests/test_auth.py::test_login_bad_password FAILED                       [ 35%]\ntests/test_auth.py::test_token_refresh PASSED                            [ 42%]\n\n=================================== FAILURES ===================================\n_________________________ test_login_bad_password ______________________________\n\n    def test_login_bad_password():\n        client = TestClient(app)\n        resp = client.post(\"/login\", json={\"user\": \"alice\", \"password\": \"wrong\"})\n>       assert resp.status_code == 401\nE       assert 500 == 401\nE        +  where 500 = <Response [500]>.status_code\n\ntests/test_auth.py:42: AssertionError\n------------------------------- Captured log -------------------------------\nERROR    app.auth:auth.py:88 bcrypt.checkpw raised: Invalid salt\n=========================== short test summary info ============================\nFAILED tests/test_auth.py::test_login_bad_password - assert 500 == 401\n========================= 1 failed, 13 passed in 2.41s =========================",
+   "before_tokens": 335,
+   "variants": [
+    {
+     "rate": 0.7,
+     "after": "pytest tests/ -v test session starts platform linux Python 3.11.4 pytest-8.4.1 pluggy-1.6.0 rootdir: /app plugins asyncio-0.23.5 cov-4.1.0 collected 14 items_parser.py_parse_header PASSED [ 7%]_parse_body PASSED 14%]_parse_empty PASSED 21%]_auth.py_login_ok PASSED 28%]_login_bad_password FAILED [ 35%]_token_refresh PASSED 42%] FAILURES test_login_bad_password def_password client = TestClient(app) client.post(\"/login\", json\"user \"alice\", \"password \"wrong\" assert.status_code == 401 E assert 500 401 E 500 = <Response [500]>.status_code/test_auth.py:42 AssertionError Captured log ERROR app.auth:auth.py:88 bcrypt.checkpw Invalid salt short test summary info FAILED tests/test_auth.py::test_login_bad_password assert 500 == 401 1 failed 13 passed in 2.41s",
+     "after_tokens": 218,
+     "reduction": 0.34925373134328364,
+     "latency_s": 19.02
+    },
+    {
+     "rate": 0.5,
+     "after": "pytest tests -v session starts platform linux Python 3.11.4 pytest-8.4.1 pluggy-1.6.0 rootdir /app plugins asyncio-0.23.5.1.0 collected 14 items_parser.py_parse_header PASSED 7%_body 14%_empty 21%_login_ok PASSED 28%_login_bad_password FAILED 35%]_token_refresh PASSED 42% FAILURES test_login_bad_password client TestClient(app.post assert_code == 401 500 401 500 [500_auth.py:42 AssertionError Captured log ERROR app.auth.py:88 bcrypt.checkpw Invalid salt test summary FAILED.py_login_bad_password assert 500 == 401 1 failed 13 passed 2.41s",
+     "after_tokens": 161,
+     "reduction": 0.5194029850746269,
+     "latency_s": 0.18
+    },
+    {
+     "rate": 0.3,
+     "after": "pytest session starts linux Python 3.11.4 pytest-8.4.1 pluggy-1.6.0 rootdir asyncio-0.23.5.1.0 14 items_header 7% 14% 21%_ok 28%_password FAILED 35%_refresh 42%_login_bad_password 401 500 401 500.py:42 AssertionError Invalid summary FAILED_login_bad_password 500 401 1 failed 13 passed 2.41s",
+     "after_tokens": 106,
+     "reduction": 0.6835820895522389,
+     "latency_s": 0.18
+    }
+   ]
+  },
+  {
+   "id": "task-en",
+   "label": "과제 설명 (영어)",
+   "why": "자연어 산문 입력입니다. 중복 표현이 많아 압축률 대비 정보 손실이 작습니다.",
+   "role": "user",
+   "before": "You are working in a Python repository. There is a bug in the\nauthentication module that causes the server to return a 500 Internal Server\nError instead of a 401 Unauthorized when a user supplies an incorrect password.\nYour task is to find the root cause of this problem and to fix it so that the\nendpoint returns the correct status code. Please make sure that you do not\nbreak any of the other tests that are currently passing in the test suite. The\nrelevant file is located at app/auth.py and the failing test can be found in\ntests/test_auth.py at line 42. After you have made your change, run the full\ntest suite again to confirm that all 14 tests pass successfully.",
+   "before_tokens": 146,
+   "variants": [
+    {
+     "rate": 0.7,
+     "after": "You working in Python repository. bug in authentication module causes server to return 500 Internal Server Error instead of 401 Unauthorized when user supplies incorrect password. Your task is to find root cause of problem to fix it so endpoint returns correct status code. do not break other tests currently passing in test suite. relevant file located at app/auth.py failing test found in tests/test_auth.py at line 42. After made change, run full test suite again to confirm all 14 tests pass successfully.",
+     "after_tokens": 98,
+     "reduction": 0.3287671232876712,
+     "latency_s": 0.19
+    },
+    {
+     "rate": 0.5,
+     "after": "working in Python repository bug in authentication module causes server 500 Internal Server Error instead of 401 Unauthorized incorrect password task find root cause fix endpoint returns correct status code break other tests passing in test suite relevant file at app/auth.py failing test in tests/test_auth.py at line 42. After change run full test suite confirm all 14 tests pass",
+     "after_tokens": 69,
+     "reduction": 0.5273972602739726,
+     "latency_s": 0.18
+    },
+    {
+     "rate": 0.3,
+     "after": "working Python repository bug authentication 500 Internal Server Error 401 incorrect password find root cause fix correct status code break tests relevant file app/auth.py failing test/test_auth.py line 42 run full test suite 14 tests pass",
+     "after_tokens": 44,
+     "reduction": 0.6986301369863014,
+     "latency_s": 0.2
+    }
+   ]
+  },
+  {
+   "id": "task-ko",
+   "label": "과제 설명 (한국어)",
+   "why": "동일 성격의 한국어 입력입니다. 다국어 모델이 한국어에서도 식별자와 숫자를 보존하는지 확인합니다.",
+   "role": "user",
+   "before": "당신은 파이썬 저장소에서 작업하고 있습니다. 인증 모듈에 버그가\n있어서, 사용자가 잘못된 비밀번호를 입력했을 때 401 Unauthorized 를 반환해야\n하는데 대신 500 Internal Server Error 를 반환하고 있습니다. 이 문제의 근본\n원인을 찾아서, 엔드포인트가 올바른 상태 코드를 반환하도록 수정하는 것이\n당신의 과제입니다. 현재 통과하고 있는 다른 테스트들을 깨뜨리지 않도록\n반드시 주의해 주십시오. 관련 파일은 app/auth.py 에 있으며, 실패하는 테스트는\ntests/test_auth.py 의 42번째 줄에서 찾을 수 있습니다. 수정을 마친 뒤에는\n전체 테스트 스위트를 다시 실행하여 14개 테스트가 모두 통과하는지\n확인해 주십시오.",
+   "before_tokens": 176,
+   "variants": [
+    {
+     "rate": 0.7,
+     "after": "파이썬 저장소에서 작업하고 인증 모듈에 버그가 잘못된 401 Unauthorized 를 반환해야 대신 500 Internal Server Error 를 반환하고 문제의 근본 원인을 엔드포인트가 올바른 상태 코드를 반환하도록 수정하는 과제입니다 통과하고 다른 테스트들을 깨뜨리지 않도록 주의해 관련 파일은 app/auth.py 에 실패하는 테스트는 tests/test_auth.py 의 42번째 줄에서 수정을 마친 전체 테스트 스위트를 다시 실행하여 14개 테스트가 통과하는지 확인해",
+     "after_tokens": 117,
+     "reduction": 0.3352272727272727,
+     "latency_s": 0.21
+    },
+    {
+     "rate": 0.5,
+     "after": "파이썬 저장소에서 인증 모듈에 버그가 잘못된 401 Unauthorized 반환해야 500 Internal Server Error 반환하고 근본 원인을 올바른 상태 코드를 반환하도록 수정하는 테스트들을 않도록 관련 파일은 app/auth.py 에 실패하는 테스트는 tests/test_auth.py 의 42번째 줄에서 전체 테스트 스위트를 다시 실행하여 14개 테스트가",
+     "after_tokens": 82,
+     "reduction": 0.5340909090909092,
+     "latency_s": 0.18
+    },
+    {
+     "rate": 0.3,
+     "after": "파이썬 저장소에서 인증 모듈에 잘못된 401 Unauthorized 500 Internal Server Error 올바른 상태 반환하도록 관련 파일은 app/auth.py 실패하는 tests/test_auth.py 의 42번째 줄에서 테스트 14개",
+     "after_tokens": 51,
+     "reduction": 0.7102272727272727,
+     "latency_s": 0.18
+    }
+   ]
+  }
+ ]
+}

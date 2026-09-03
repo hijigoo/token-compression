@@ -1,0 +1,74 @@
+# ⚠️ 이 파일은 **ko 만** 돌리기 위한 것입니다.
+# 정본은 experiments/terminal-bench-sweep.yaml 이며 langs 가 [en, ko] 입니다.
+# en 은 이미 측정을 마쳤으므로 재실행하지 않고 재활용합니다.
+# 보고서는 두 run 디렉터리를 조건 이름으로 합칩니다.
+
+# 목적: **압축률–정확도 곡선**을 얻는다.
+#
+# terminal-bench-wide.yaml 은 rate 0.7 · 0.5 두 점만 측정했습니다. 두 점으로는
+# 기울기만 알 뿐 곡선의 모양을 알 수 없고, 특히 **정확도가 유지되는 상한**이
+# 어디인지 판단할 수 없습니다. 0.9 · 0.8 을 넣어 완만한 압축 구간을 채웁니다.
+#
+# 조건을 나눠 돌리지 않고 **한 롤아웃에 다섯 개를 모두** 넣습니다. 회차가
+# 다르면 그 사이의 측정 변동이 조건 차이에 섞여 들어가는데, 앞선 대조 측정에서
+# 그 변동이 pass@1 ±25%p 로 관측되었기 때문입니다. 같은 회차 안에서 비교해야
+# 최소한 그 변동을 공통으로 겪습니다.
+#
+# 태스크는 terminal-bench-wide.yaml 과 동일하게 유지합니다. 태스크를 바꾸면
+# 기존 측정과 비교할 수 없습니다.
+#
+#   PUBLIC_HOST=host.docker.internal \
+#   PIER_EXTRA_SAFE_PORTS="8801 8802 8803 8804 8805 8806" \
+#   ./run_all.sh experiments/terminal-bench-sweep.yaml /tmp/tbsweep
+#
+# 8 태스크 × 5 조건 = 40 trial. 4 병렬로 40~60분.
+
+name: terminal-bench-sweep
+benchmark: terminal-bench
+# 주 측정과 대조 측정은 **동일한 태스크·언어 구성**을 씁니다. 구성이
+# 어긋나면 대조 측정으로 잰 변동 폭을 주 측정에 적용할 수 없습니다.
+langs: [ko]
+model: openai/gpt-5.4      # 최종 호출 모델. 압축기(xlm-roberta)와 별개입니다.
+agent: mini-swe-agent
+
+dataset:
+  tasks:
+    - openssl-selfsigned-cert
+    - fix-git
+    - regex-log
+    - count-dataset-tokens
+    - sqlite-db-truncate
+    - filter-js-from-html
+    - cancel-async-tasks
+    - overfull-hbox
+    - cobol-modernization      # COBOL 코드 현대화
+    - db-wal-recovery          # WAL 기반 DB 복구
+    - log-summary-date-ranges  # 로그 기간별 집계
+
+n_attempts: 1
+n_concurrent_trials: 4
+
+arms:
+  - name: baseline
+    kind: direct
+
+  # rate 는 **남길 비율**입니다. 위에서 아래로 갈수록 압축이 강해집니다.
+  - name: llmlingua2-r0.9
+    kind: local
+    compressor: llmlingua
+    ratio: 0.9
+
+  - name: llmlingua2-r0.8
+    kind: local
+    compressor: llmlingua
+    ratio: 0.8
+
+  - name: llmlingua2-r0.7
+    kind: local
+    compressor: llmlingua
+    ratio: 0.7
+
+  - name: llmlingua2-r0.5
+    kind: local
+    compressor: llmlingua
+    ratio: 0.5

@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>압축기 벤치마크 — terminal-bench</title>
+<style>
+:root{--bg:#0f1115;--fg:#e6e8eb;--dim:#9aa4b2;--line:#252a33;--accent:#6ea8fe;
+--good:#63c98f;--warn:#e0b341;--bad:#e06c75;--card:#161a21}
+@media(prefers-color-scheme:light){:root{--bg:#fff;--fg:#1c1f24;--dim:#5b6472;
+--line:#e3e6ea;--accent:#1f6feb;--card:#f6f8fa}}
+*{box-sizing:border-box}
+body{margin:0;padding:0;background:var(--bg);color:var(--fg);
+font:15px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding:48px 28px 96px}
+h1{font-size:30px;margin:0 0 8px;letter-spacing:-.02em}
+h2{font-size:22px;margin:52px 0 14px;padding-top:20px;border-top:1px solid var(--line)}
+h3{font-size:17px;margin:28px 0 10px;color:var(--accent)}
+p{margin:12px 0}
+code{background:var(--card);padding:2px 6px;border-radius:4px;
+font:13px ui-monospace,SFMono-Regular,Menlo,monospace}
+pre{background:var(--card);border:1px solid var(--line);border-radius:8px;
+padding:14px 16px;overflow-x:auto}
+pre code{background:none;padding:0}
+table{border-collapse:collapse;width:100%;margin:16px 0;font-size:13.5px;
+display:block;overflow-x:auto;white-space:nowrap}
+th,td{border-bottom:1px solid var(--line);padding:8px 12px;text-align:left}
+th{background:var(--card);font-weight:600;position:sticky;top:0}
+tr:hover td{background:var(--card)}
+blockquote{margin:16px 0;padding:10px 18px;border-left:3px solid var(--accent);
+background:var(--card);border-radius:0 6px 6px 0;color:var(--dim)}
+ul{padding-left:22px}
+li{margin:6px 0}
+strong{color:var(--fg)}
+.meta{color:var(--dim);font-size:13px}
+hr{border:0;border-top:1px solid var(--line);margin:36px 0}
+.toc{background:var(--card);border:1px solid var(--line);border-radius:8px;
+padding:14px 22px;margin:24px 0}
+.toc a{color:var(--accent);text-decoration:none}
+.toc a:hover{text-decoration:underline}
+.n{text-align:right;font-variant-numeric:tabular-nums}
+.chart{width:100%;height:auto;margin:18px 0;background:var(--card);
+border:1px solid var(--line);border-radius:8px;padding:10px}
+.chart .grid{stroke:var(--line);stroke-width:1}
+.chart .ax{fill:var(--dim);font-size:11px}
+</style></head>
+<body><div class="wrap"><h1>terminal-bench — 컨테이너 롤아웃 결과</h1>
+<p>*20260903-230326 · terminal-bench · openai/gpt-5.4 · 태스크 3개 · 언어 en/ko · trial 18건*</p>
+<div class="toc"><strong>목차</strong><br><a href="#s0">1. 세 줄 요약</a> · <a href="#s1">2. 무엇을 어떻게 쟀나</a> · <a href="#s2">3. 지표 읽는 법</a> · <a href="#s3">4. 결과</a> · <a href="#s4">5. 절감과 정확도의 맞바꿈</a> · <a href="#s5">6. 태스크·언어별</a> · <a href="#s6">7. 실패한 trial</a> · <a href="#s7">8. 이 결과로 말할 수 없는 것</a> · <a href="#s8">부록 — 재현</a></div><h2 id="s2">1. 세 줄 요약</h2>
+<p>1. 압축 arm 중 가장 나은 <strong>llmlingua2-r0.7</strong> 는 기준선 대비 입력 토큰을 <strong>-2.0%</strong> 바꾸면서 pass@1 이 <strong>30.0%p 낮았습니다</strong> (80.0% → 50.0%).</p>
+<p>2. 토큰이 <strong>늘었습니다.</strong> 압축은 프롬프트를 줄이지만, 정보가 빠지면 에이전트가 파일을 다시 읽습니다. 그 되읽기가 절감분을 먹습니다.</p>
+<p>3. 18건 중 <strong>1건이 오류로 중단</strong>됐습니다. 압축 품질과 무관한 실패가 섞여 있는지 7절에서 확인하세요.</p>
+<p>4. 채점된 trial 은 <strong>17건</strong>뿐입니다. 이 숫자는 <strong>경향</strong>이지 순위가 아닙니다 — 8절을 읽어 주세요.</p>
+<h2 id="s7">2. 무엇을 어떻게 쟀나</h2>
+<p>에이전트가 <strong>컨테이너 안에서 실제로</strong> 과제를 풀고, 별도 채점 컨테이너가</p>
+<p>테스트를 돌립니다. 압축은 에이전트와 모델 사이에 낀 프록시가 합니다.</p>
+<p>에이전트도 벤치마크도 압축이 끼어든 걸 모릅니다.</p>
+<pre><code>에이전트 컨테이너 ──▶ squid(egress) ──▶ proxy.py ──▶ 모델 API
+                                         └ LLMLingua-2 압축
+        ↓ 다 끝나면
+채점 컨테이너 ──▶ 테스트 실행 ──▶ reward</code></pre>
+<p>그래서 이 표의 pass@1 은 <strong>대리 지표가 아니라 실제 성공률</strong>입니다.</p>
+<p>대신 1 trial 이 5~15분이라 조건을 많이 둘 수 없습니다.</p>
+<table><thead><tr><th>arm</th><th>경로</th><th>압축기</th><th>rate</th><th>이 값이 뜻하는 것</th></tr></thead><tbody><tr><td class=""><code>baseline</code></td><td class="">모델 API 직행</td><td class="">—</td><td class="">—</td><td class="">압축 없음. 다른 모든 값의 기준선입니다.</td></tr><tr><td class=""><code>llmlingua2-r0.7</code></td><td class="">프록시 경유</td><td class="">llmlingua</td><td class=""><code>0.7</code></td><td class="">프롬프트를 원래 길이의 <strong>0.7배</strong>까지 남깁니다. 작을수록 세게 줄입니다.</td></tr><tr><td class=""><code>llmlingua2-r0.5</code></td><td class="">프록시 경유</td><td class="">llmlingua</td><td class=""><code>0.5</code></td><td class="">프롬프트를 원래 길이의 <strong>0.5배</strong>까지 남깁니다. 작을수록 세게 줄입니다.</td></tr></tbody></table>
+<blockquote><strong>rate 는 목표치이지 결과가 아닙니다.</strong> LLMLingua 는 토큰을 지우는 방식이라 실제 절감은 문서 성격에 따라 달라집니다. 실제로 얼마나 줄었는지는 4절의 *입력 토큰* 열을 보세요.</blockquote>
+<h2 id="s16">3. 지표 읽는 법</h2>
+<table><thead><tr><th>지표</th><th>무엇인가</th><th>어떻게 나오나</th><th>방향</th></tr></thead><tbody><tr><td class=""><strong>pass@1</strong></td><td class="">한 번 시도해서 과제를 완전히 푼 비율</td><td class="">채점 컨테이너가 테스트를 돌려 <code>reward</code>가 1인 trial ÷ 채점된 trial</td><td class="">높을수록 좋음</td></tr><tr><td class=""><strong>부분점수</strong></td><td class="">다 못 풀었어도 통과한 테스트 비율</td><td class=""><code>partial_reward</code>의 평균. pass@1 이 0이어도 여기서 차이가 보입니다</td><td class="">높을수록 좋음</td></tr><tr><td class=""><strong>입력 토큰</strong></td><td class="">롤아웃 전체에서 모델에 <strong>들여보낸</strong> 토큰의 합</td><td class="">에이전트가 기록한 <code>n_input_tokens</code>의 평균. 압축 효과가 최종적으로 나타나는 곳입니다</td><td class="">낮을수록 좋음</td></tr><tr><td class=""><strong>peak 컨텍스트</strong></td><td class="">한 번의 호출에서 가장 컸던 프롬프트</td><td class=""><code>peak_context_tokens</code>의 평균. 컨텍스트 한도에 부딪히는지 보는 값</td><td class="">낮을수록 좋음</td></tr><tr><td class=""><strong>스텝</strong></td><td class="">에이전트가 명령을 몇 번 실행했나</td><td class=""><code>n_agent_steps</code>의 평균. 압축으로 정보가 빠지면 되읽느라 늘어납니다</td><td class="">낮을수록 좋음</td></tr><tr><td class=""><strong>비용</strong></td><td class="">그 trial 의 모델 요금</td><td class=""><code>cost_usd</code>의 평균. 캐시 할인이 반영된 실제 청구 기준</td><td class="">낮을수록 좋음</td></tr><tr><td class=""><strong>소요</strong></td><td class="">trial 하나가 걸린 벽시계 시간</td><td class=""><code>started_at</code>~<code>finished_at</code>. 압축 자체의 지연이 여기 포함됩니다</td><td class="">낮을수록 좋음</td></tr><tr><td class=""><strong>자기보고 절감</strong></td><td class="">프록시가 스스로 잰 문자 수 절감</td><td class=""><code>chars_before</code>/<code>chars_after</code>. <strong>참고값입니다</strong> — 압축기가 자기 성적을 매기는 셈이라, 근거는 왼쪽의 *입력 토큰*입니다</td><td class="">참고</td></tr></tbody></table>
+<h2 id="s18">4. 결과</h2>
+<table><thead><tr><th>arm</th><th>채점</th><th>pass@1</th><th>부분점수</th><th>입력 토큰</th><th>vs 기준</th><th>peak</th><th>스텝</th><th>비용</th><th>소요</th><th>자기보고</th></tr></thead><tbody><tr><td class=""><code>baseline</code></td><td class="">5/6 (오류 1)</td><td class="">80.0%</td><td class="">—</td><td class="">30,185</td><td class="">기준</td><td class="">7,923</td><td class="">6.2</td><td class="">$0.10</td><td class="">1.0분</td><td class="">—</td></tr><tr><td class=""><code>llmlingua2-r0.7</code></td><td class="">6/6</td><td class="">50.0%</td><td class="">—</td><td class="">30,782</td><td class="">-2.0%</td><td class="">6,169</td><td class="">7.2</td><td class="">$0.10</td><td class="">1.5분</td><td class="">25.6%</td></tr><tr><td class=""><code>llmlingua2-r0.5</code></td><td class="">6/6</td><td class="">50.0%</td><td class="">—</td><td class="">25,341</td><td class="">+16.0%</td><td class="">5,214</td><td class="">7.0</td><td class="">$0.08</td><td class="">3.1분</td><td class="">37.7%</td></tr></tbody></table>
+<blockquote>프록시가 401 을 받아 토큰을 새로 발급하고 재시도한 횟수: <strong>27회</strong>. 이 재시도가 없으면 그 시점에 롤아웃이 중단됩니다(에이전트가 <code>--exit-immediately</code> 로 돌기 때문).</blockquote>
+<svg class="chart" viewBox="0 0 900 146" xmlns="http://www.w3.org/2000/svg" role="img"><text x="8" y="20" class="ax" style="font-size:13px;font-weight:600">pass@1 (높을수록 좋음)</text><text x="8" y="55" class="ax">baseline</text><rect x="170" y="43" width="620.0" height="18" rx="3" fill="var(--good)" opacity="0.85"/><text x="798.0" y="57" class="ax">80%</text><text x="8" y="89" class="ax">llmlingua2-r0.7</text><rect x="170" y="77" width="387.5" height="18" rx="3" fill="var(--accent)" opacity="0.85"/><text x="565.5" y="91" class="ax">50%</text><text x="8" y="123" class="ax">llmlingua2-r0.5</text><rect x="170" y="111" width="387.5" height="18" rx="3" fill="var(--accent)" opacity="0.85"/><text x="565.5" y="125" class="ax">50%</text></svg>
+<svg class="chart" viewBox="0 0 900 146" xmlns="http://www.w3.org/2000/svg" role="img"><text x="8" y="20" class="ax" style="font-size:13px;font-weight:600">평균 입력 토큰 (낮을수록 좋음)</text><text x="8" y="55" class="ax">baseline</text><rect x="170" y="43" width="608.0" height="18" rx="3" fill="var(--accent)" opacity="0.85"/><text x="786.0" y="57" class="ax">30,185</text><text x="8" y="89" class="ax">llmlingua2-r0.7</text><rect x="170" y="77" width="620.0" height="18" rx="3" fill="var(--accent)" opacity="0.85"/><text x="798.0" y="91" class="ax">30,782</text><text x="8" y="123" class="ax">llmlingua2-r0.5</text><rect x="170" y="111" width="510.4" height="18" rx="3" fill="var(--good)" opacity="0.85"/><text x="688.4" y="125" class="ax">25,341</text></svg>
+<pre><code>pass@1
+  baseline         ██████████████████████ 80.0%
+  llmlingua2-r0.7  ██████████████         50.0%
+  llmlingua2-r0.5  ██████████████         50.0%
+
+평균 입력 토큰
+  baseline         ██████████████████████ 30,185
+  llmlingua2-r0.7  ██████████████████████ 30,782
+  llmlingua2-r0.5  ██████████████████     25,341</code></pre>
+<h2 id="s24">5. 절감과 정확도의 맞바꿈</h2>
+<p>왼쪽 아래로 갈수록 나쁩니다. 토큰도 못 줄이고 정확도도 떨어진 것입니다.</p>
+<p>오른쪽 위가 이상적입니다.</p>
+<svg class="chart" viewBox="0 0 900 380" xmlns="http://www.w3.org/2000/svg" role="img"><text x="8" y="20" class="ax" style="font-size:13px;font-weight:600">절감 × pass@1</text><line class="grid" x1="64" y1="316" x2="870" y2="316"/><line class="grid" x1="64" y1="34" x2="64" y2="316"/><text x="870" y="342" class="ax" text-anchor="end">입력 토큰 절감 →</text><text x="8" y="46" class="ax">↑ pass@1</text><circle cx="152.5" cy="69.3" r="6" fill="var(--accent)"/><text x="162.5" y="73.3" class="ax">baseline (0%, 80%)</text><circle cx="64.0" cy="280.8" r="6" fill="var(--accent)"/><text x="74.0" y="284.8" class="ax">llmlingua2-r0.7 (-2%, 50%)</text><circle cx="870.0" cy="280.8" r="6" fill="var(--accent)"/><text x="880.0" y="284.8" class="ax">llmlingua2-r0.5 (16%, 50%)</text></svg>
+<h2 id="s28">6. 태스크·언어별</h2>
+<table><thead><tr><th>태스크</th><th>언어</th><th>baseline</th><th>llmlingua2-r0.7</th><th>llmlingua2-r0.5</th></tr></thead><tbody><tr><td class="">cobol-modernization</td><td class="">en</td><td class="">✅</td><td class="">❌</td><td class="">✅</td></tr><tr><td class="">cobol-modernization</td><td class="">ko</td><td class="">✅</td><td class="">✅</td><td class="">❌</td></tr><tr><td class="">db-wal-recovery</td><td class="">en</td><td class="">❌</td><td class="">❌</td><td class="">❌</td></tr><tr><td class="">db-wal-recovery</td><td class="">ko</td><td class="">오류</td><td class="">❌</td><td class="">❌</td></tr><tr><td class="">log-summary-date-ranges</td><td class="">en</td><td class="">✅</td><td class="">✅</td><td class="">✅</td></tr><tr><td class="">log-summary-date-ranges</td><td class="">ko</td><td class="">✅</td><td class="">✅</td><td class="">✅</td></tr></tbody></table>
+<p>✅ = 전부 통과(reward 1) · ❌ = 미통과 · 옆의 %는 부분점수입니다.</p>
+<p>부분점수가 높은데 ❌ 라면 &quot;거의 다 왔는데 한 가지를 놓쳤다&quot; 는 뜻입니다.</p>
+<h2 id="s32">7. 실패한 trial</h2>
+<table><thead><tr><th>태스크</th><th>언어</th><th>arm</th><th>예외</th><th>스텝</th></tr></thead><tbody><tr><td class="">db-wal-recovery</td><td class="">ko</td><td class=""><code>baseline</code></td><td class=""><code>NonZeroAgentExitCodeError</code></td><td class="">4</td></tr></tbody></table>
+<blockquote>스텝이 <strong>0</strong> 이면 모델을 한 번도 못 불렀다는 뜻이라 압축 품질과 무관합니다. 네트워크·인증을 먼저 의심하세요. 스텝이 쌓인 뒤 죽었다면 그때는 압축된 컨텍스트로 에이전트가 헤맸을 가능성이 있습니다.</blockquote>
+<h2 id="s35">8. 이 결과로 말할 수 없는 것</h2>
+<ul><li><strong>표본이 17건입니다.</strong> arm 당 가장 적은 곳이 5건이라, 한 건이 뒤집히면 pass@1 이 20%p 움직입니다. 순위를 말하려면 <code>n_attempts</code> 를 올려 다시 돌려야 합니다.</li><li><strong>태스크가 편향돼 있습니다.</strong> 여기 쓴 태스크는 전체 중 일부만 고른 것이라, 다른 태스크에서 같은 결론이 나온다는 보장이 없습니다.</li><li><strong>모델 한 종류만 봤습니다.</strong> 압축에 대한 내성은 모델마다 다릅니다. 여기서는 <code>openai/gpt-5.4</code> 하나입니다.</li><li><strong>캐시가 결과를 흔듭니다.</strong> 압축은 프롬프트 앞부분을 바꾸므로 프리픽스 캐시가 깨집니다. 그래서 토큰이 줄어도 <strong>비용은 늘 수 있습니다.</strong> 4절에서 두 열을 같이 보세요.</li></ul>
+<h2 id="s37">부록 — 재현</h2>
+<pre><code># 1) pier 를 이 환경에 맞게 손봅니다 (사내망 미러 + egress 허용 포트)
+./.venv/bin/python patch_pier.py
+
+# 2) 프록시를 띄우고 pier 설정을 만듭니다
+export OPENAI_API_KEY=$(az account get-access-token \
+  --scope https://cognitiveservices.azure.com/.default \
+  --query accessToken -o tsv)
+export UPSTREAM_BASE_URL=&lt;endpoint&gt;
+export PUBLIC_HOST=host.docker.internal
+export PIER_EXTRA_SAFE_PORTS=&#x27;8801 8802 8803 8804&#x27;
+python launch.py experiments/terminal-bench.yaml
+
+# 3) 롤아웃
+pier run --config runs/agentic-eval/terminal-bench/terminal-bench/20260903-230326/en/pier.yaml --jobs-dir /tmp/job
+
+# 4) 이 보고서
+python report_run.py runs/agentic-eval/terminal-bench/terminal-bench/20260903-230326 --jobs /tmp/job -o reports/terminal-bench</code></pre>
+<blockquote><code>PIER_EXTRA_SAFE_PORTS</code> 를 빼면 압축 arm 이 <strong>0 스텝에서 죽습니다.</strong> pier 의 egress 프록시(squid)가 80/443 외의 포트를 허용목록보다 <strong>먼저</strong> 막기 때문입니다. 자세한 이유는 <code>patch_pier.py</code> 의 설명에 있습니다.</blockquote></div></body></html>

@@ -42,6 +42,37 @@ HOP_BY_HOP = {
 }
 
 _stats_lock = threading.Lock()
+_token_lock = threading.Lock()
+_token_cache: dict = {"value": None, "until": 0.0}
+
+# Entra ID 토큰을 받을 대상. Azure OpenAI / Foundry 는 이 스코프를 씁니다.
+TOKEN_SCOPE = os.environ.get(
+    "AZURE_TOKEN_SCOPE", "https://cognitiveservices.azure.com/.default")
+
+
+def _fresh_token() -> str | None:
+    """`az` 로 Entra ID 토큰을 받아 온다. 못 받으면 None.
+
+    30초 동안 캐시합니다. 401 이 여러 요청에서 동시에 터지면 `az` 를 그만큼
+    부르게 되는데, 한 번에 1~2초씩 걸려 롤아웃이 눈에 띄게 느려집니다.
+    """
+    with _token_lock:
+        if _token_cache["value"] and time.time() < _token_cache["until"]:
+            return _token_cache["value"]
+        try:
+            import subprocess
+            out = subprocess.run(
+                ["az", "account", "get-access-token", "--scope", TOKEN_SCOPE,
+                 "--query", "accessToken", "-o", "tsv"],
+                capture_output=True, text=True, timeout=60)
+        except Exception:  # noqa: BLE001
+            return None
+        token = out.stdout.strip()
+        if out.returncode != 0 or not token:
+            return None
+        _token_cache.update(value=token, until=time.time() + 30)
+        return token
+
 
 
 class Config:
@@ -69,6 +100,101 @@ def _chars(messages: list[dict]) -> int:
     return sum(len(m["content"]) for m in messages if isinstance(m.get("content"), str))
 
 
+# ─────────────────────────────────────────────────────────────
+# 요청 본문 → 압축 슬롯
+#
+# ★ 이 어댑터가 없으면 압축이 **한 글자도 걸리지 않습니다.**
+#
+# 오래 그런 상태였습니다. 프록시는 `/chat/completions` 의 `messages` 만 보고
+# 있었는데, pier 의 mini-swe-agent 는 `model.model_class=litellm_response` 로
+# 떠서 `/v1/responses` 를 부릅니다. 그래서 압축 arm 이 사실은 baseline 과
+# 똑같은 프롬프트를 보내고 있었고, 로그에는 `usage` 만 남고 `compress` 는
+# 하나도 남지 않았습니다. 결과 표만 봐서는 "압축해도 별 차이 없네" 로
+# 읽히기 때문에 특히 위험합니다.
+#
+# 두 API 의 모양이 다릅니다.
+#
+#   chat/completions   {"messages": [{"role","content": str}]}
+#   responses          {"instructions": str,
+#                       "input": str | [{"role","content": str | [파트…]},
+#                                       {"type":"function_call_output","output":…}]}
+#
+# 압축기의 계약은 `list[{"role","content": str}]` 하나뿐이라, 여기서 한 번
+# 펴 두면 압축기는 어느 API 인지 몰라도 됩니다.
+# ─────────────────────────────────────────────────────────────
+class _Slot:
+    """본문 안의 '압축할 수 있는 문자열' 한 자리."""
+
+    __slots__ = ("role", "text", "_set")
+
+    def __init__(self, role: str, text: str, setter):
+        self.role, self.text, self._set = role, text, setter
+
+    def write(self, value: str) -> None:
+        if isinstance(value, str):
+            self._set(value)
+
+
+def _slots(payload: dict) -> list[_Slot]:
+    out: list[_Slot] = []
+
+    msgs = payload.get("messages")
+    if isinstance(msgs, list) and msgs:
+        for m in msgs:
+            if isinstance(m, dict) and isinstance(m.get("content"), str):
+                out.append(_Slot(m.get("role", "user"), m["content"],
+                                 lambda v, m=m: m.__setitem__("content", v)))
+        return out
+
+    if payload.get("input") is None and "instructions" not in payload:
+        return out
+
+    # instructions 는 Responses API 의 system 프롬프트 자리입니다.
+    # role 을 system 으로 넘겨야 skip_system 정책이 여기에도 걸립니다.
+    if isinstance(payload.get("instructions"), str):
+        out.append(_Slot("system", payload["instructions"],
+                         lambda v: payload.__setitem__("instructions", v)))
+
+    inp = payload.get("input")
+    if isinstance(inp, str):
+        out.append(_Slot("user", inp, lambda v: payload.__setitem__("input", v)))
+        return out
+    if not isinstance(inp, list):
+        return out
+
+    for item in inp:
+        if not isinstance(item, dict):
+            continue
+        role = item.get("role") or _ROLE_BY_TYPE.get(item.get("type", ""), "user")
+        content = item.get("content")
+
+        if isinstance(content, str):
+            out.append(_Slot(role, content,
+                             lambda v, i=item: i.__setitem__("content", v)))
+        elif isinstance(content, list):
+            for part in content:
+                # 텍스트 파트만 다룹니다. 이미지·오디오는 문자열이 아니라
+                # 압축기에 넘길 수 없고, 넘겨도 뜻이 없습니다.
+                if isinstance(part, dict) and isinstance(part.get("text"), str):
+                    out.append(_Slot(role, part["text"],
+                                     lambda v, p=part: p.__setitem__("text", v)))
+        # 도구 실행 결과. 에이전트 컨텍스트에서 가장 크게 자라는 자리라
+        # 압축 효과가 여기서 제일 크게 납니다.
+        elif isinstance(item.get("output"), str):
+            out.append(_Slot(role, item["output"],
+                             lambda v, i=item: i.__setitem__("output", v)))
+    return out
+
+
+_ROLE_BY_TYPE = {
+    "function_call_output": "tool",
+    "function_call": "assistant",
+    "reasoning": "assistant",
+    "message": "user",
+}
+
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     server_version = "token-compression-proxy/1.0"
@@ -94,7 +220,8 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(length) if length else b""
 
-        if self.path.endswith("/chat/completions") and body:
+        if body and (self.path.endswith("/chat/completions")
+                     or self.path.rstrip("/").endswith("/responses")):
             body = self._compress_body(body)
 
         self._forward(body)
@@ -109,10 +236,13 @@ class Handler(BaseHTTPRequestHandler):
         except json.JSONDecodeError:
             return body  # 우리가 못 읽는 형식이면 손대지 않는다
 
-        messages = payload.get("messages")
-        if not isinstance(messages, list) or not messages:
+        # Chat Completions 는 messages, Responses 는 input 을 씁니다.
+        # 둘의 모양이 다르므로 슬롯으로 한 번 펴서 같게 다룹니다.
+        slots = _slots(payload)
+        if not slots:
             return body
 
+        messages = [{"role": s.role, "content": s.text} for s in slots]
         before = _chars(messages)
         t0 = time.perf_counter()
         try:
@@ -124,19 +254,30 @@ class Handler(BaseHTTPRequestHandler):
             _record({"event": "compress_error", "error": f"{type(e).__name__}: {e}"})
             return body
 
+        if len(compressed) != len(slots):
+            # 압축기가 메시지 개수를 바꾸면 어느 슬롯에 되돌릴지 알 수 없습니다.
+            # 지금 압축기들은 그러지 않지만, 조용히 깨지는 것보다 낫습니다.
+            self.log_message("압축기가 메시지 수를 바꿨습니다(%d→%d). 원문 전달",
+                             len(slots), len(compressed))
+            _record({"event": "compress_error", "error": "message count changed"})
+            return body
+
         after = _chars(compressed)
-        payload["messages"] = compressed
+        for slot, msg in zip(slots, compressed):
+            slot.write(msg.get("content", slot.text))
 
         _record({
             "event": "compress",
             "model": payload.get("model"),
-            "n_messages": len(messages),
+            "endpoint": "responses" if payload.get("input") is not None else "chat",
+            "n_messages": len(slots),
             "chars_before": before,
             "chars_after": after,
             "reduction": round(1 - after / before, 4) if before else 0.0,
             "elapsed_ms": round((time.perf_counter() - t0) * 1000, 1),
         })
         return json.dumps(payload).encode("utf-8")
+
 
     # ── 전달 ──────────────────────────────────────────────────
     def _forward(self, body: bytes) -> None:
@@ -149,12 +290,8 @@ class Handler(BaseHTTPRequestHandler):
         if body:
             headers["Content-Length"] = str(len(body))
 
-        req = urllib.request.Request(
-            url, data=body or None, headers=headers, method=self.command
-        )
-
         try:
-            resp = urllib.request.urlopen(req, timeout=Config.timeout)
+            resp = self._send(url, body, headers)
         except urllib.error.HTTPError as e:
             # 업스트림의 상태코드·본문을 그대로 보존한다. 여기서 200 으로
             # 바꾸면 429/401 을 디버깅할 수 없게 된다.
@@ -178,6 +315,50 @@ class Handler(BaseHTTPRequestHandler):
                 payload = resp.read()
                 self._record_usage(payload, ctype)
                 self._respond(resp.status, out_headers, payload)
+
+    def _send(self, url: str, body: bytes, headers: dict):
+        """업스트림에 보낸다. 401 이면 토큰을 새로 받아 **한 번만** 다시 보낸다.
+
+        왜 필요한가. 에이전트는 컨테이너가 뜰 때 받은 토큰 하나를 끝까지 씁니다.
+        Entra ID 토큰은 한 시간 남짓이라, 롤아웃이 길어지면 도중에 만료됩니다.
+        만료가 아니어도 Azure 쪽에서 간헐적으로 401 이 돌아올 때가 있습니다.
+
+        그런데 mini-swe-agent 는 `--exit-immediately` 로 돌아서 **한 번의 401 에
+        루프 전체가 끝납니다.** 실제로 그렇게 죽은 적이 있습니다.
+
+            200 200 200 200 200 200  401  ← 여기서 33 스텝짜리 롤아웃이 중단
+
+        그러면 그 실패가 압축 탓인지 인증 탓인지 결과만 보고는 알 수 없습니다.
+        그래서 프록시가 대신 토큰을 새로 받아 재시도합니다. 프록시는 호스트에서
+        돌아 `az` 를 쓸 수 있지만 컨테이너 안 에이전트는 그럴 수 없습니다.
+        여기 두는 게 유일하게 가능한 자리입니다.
+
+        재발급 수단이 없으면 (az 가 없거나 실패) 원래 401 을 그대로 올립니다.
+        조용히 200 으로 바꾸면 인증 문제를 영영 못 보게 됩니다.
+        """
+        try:
+            return urllib.request.urlopen(
+                urllib.request.Request(url, data=body or None,
+                                       headers=headers, method=self.command),
+                timeout=Config.timeout)
+        except urllib.error.HTTPError as e:
+            if e.code != 401 or "authorization" not in {k.lower() for k in headers}:
+                raise
+            token = _fresh_token()
+            if not token:
+                raise
+            e.read()                      # 소켓을 닫아 준다
+            retry = dict(headers)
+            for k in list(retry):
+                if k.lower() == "authorization":
+                    retry[k] = f"Bearer {token}"
+            self.log_message("401 → 토큰 재발급 후 재시도")
+            _record({"event": "auth_retry"})
+            return urllib.request.urlopen(
+                urllib.request.Request(url, data=body or None,
+                                       headers=retry, method=self.command),
+                timeout=Config.timeout)
+
 
     def _record_usage(self, payload: bytes, ctype: str) -> None:
         if "json" not in ctype:

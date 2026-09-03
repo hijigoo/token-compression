@@ -1,0 +1,1 @@
+LaTeX 문서 `main.tex` 이 설치된 TeX distribution과 `pdflatex` 컴파일러를 사용하여 `"overfull hbox"` 경고 없이 성공적으로 컴파일되도록 하세요. 이를 수행할 때, 당신이 할 수 있는 유일한 수정은 `input.tex` 의 단어를 `synonyms.txt` 에 지정된 동의어로 교체하는 것뿐입니다 (`synonyms.txt` 의 각 줄은 허용된 동의어 집합 하나를 지정합니다). `main.tex` 또는 `synonyms.txt` 는 수정하지 마세요.

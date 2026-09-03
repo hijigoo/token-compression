@@ -49,6 +49,9 @@ PYPI_INDEX = os.environ.get(
 # ─────────────────────────────────────────────────────────────
 BENCHMARKS = {
     "deep-swe": {"root": "datasets/deep-swe", "tasks": "tasks"},
+    # Terminal Bench 2.1 은 pier 와 같은 task.toml 스키마를 씁니다(둘 다
+    # Harbor 계열). 그래서 로더를 따로 만들 필요 없이 한 줄로 붙습니다.
+    "terminal-bench": {"root": "datasets/terminal-bench", "tasks": "tasks"},
 }
 LANGS = ("en", "ko")
 
@@ -346,6 +349,15 @@ def wait_healthy(port: int, proc: subprocess.Popen, name: str, timeout: float = 
 # ─────────────────────────────────────────────────────────────
 # pier 설정 생성
 # ─────────────────────────────────────────────────────────────
+# mini-swe-agent 에 얹을 설정. pier 가 `-c <파일>` 로 넘겨 준다.
+#
+# step_limit 은 "한 과제에 모델을 몇 번까지 부를 수 있는가" 다. 압축 조건이
+# 헤매기 시작하면 끝없이 늘어나므로 상한이 필요하다. 60 은 DeepSWE 기준
+# 조건의 관측치(35 스텝)에 여유를 얹은 값이다 — 정상적으로 푸는 경로는
+# 막지 않으면서, 헤매는 경로는 끊는다.
+_STEP_LIMIT_YAML = "agent:\n  step_limit: 60\n"
+
+
 def build_pier_config(spec: dict, arms: list[dict], public_host: str,
                       upstream: str, lang: str, task_dir: Path,
                       n_tasks: int) -> dict:
@@ -359,6 +371,18 @@ def build_pier_config(spec: dict, arms: list[dict], public_host: str,
         agents.append({
             "name": spec.get("agent", "mini-swe-agent"),
             "model_name": spec["model"],
+            # ★ 스텝 상한.
+            #
+            # 압축을 걸면 에이전트가 헤매면서 스텝이 늘어난다. DeepSWE
+            # smoke 에서 기준 조건이 35 스텝에 끝난 과제를 압축 조건은
+            # 80 스텝을 넘겨도 못 끝냈다(59분 경과). 상한이 없으면 한 trial
+            # 이 몇 시간을 잡아먹고, 그동안 다른 조건이 밀린다.
+            #
+            # 상한은 **모든 조건에 동일하게** 건다. 압축 조건에만 걸면
+            # 비교가 깨진다. 상한에 걸린 trial 은 실패로 집계되는데, 이는
+            # "주어진 예산 안에 못 끝냈다" 는 뜻이라 정확도 지표로서
+            # 타당하다 — 실제 운영에서도 예산은 유한하다.
+            "kwargs": {"config_yaml": _STEP_LIMIT_YAML},
             "env": {
                 "OPENAI_API_KEY": "${OPENAI_API_KEY}",
                 "OPENAI_BASE_URL": base_url,
@@ -390,6 +414,21 @@ def build_pier_config(spec: dict, arms: list[dict], public_host: str,
         "datasets": [ds],
         "environment": {"type": spec.get("environment", "docker")},
         "agents": agents,
+        # ★ 채점 컨테이너에도 같은 미러를 준다.
+        #
+        # 에이전트만 챙기면 안 된다. Terminal Bench 태스크의 tests/test.sh 는
+        # 거의 모두 `uvx -w pytest==8.4.1 ...` 로 시작하는데, 이게 막히면
+        # 테스트가 **한 줄도 안 돌고** reward.txt 에 0 이 적힌다.
+        #
+        # 그러면 에이전트가 과제를 완벽히 풀어도 pass@1 이 0 으로 나온다.
+        # 실제로 그렇게 24 trial 을 버렸다 — 표에는 "모든 arm 0%" 로 찍혀서
+        # 벤치마크가 어려운 줄로만 보였다. 로그를 열어 보고서야
+        # `tls handshake eof` 를 발견했다.
+        "verifier": {
+            "env": {"UV_DEFAULT_INDEX": PYPI_INDEX,
+                    "UV_INDEX_URL": PYPI_INDEX,
+                    "PIP_INDEX_URL": PYPI_INDEX},
+        } if PYPI_INDEX else {},
     }
 
 

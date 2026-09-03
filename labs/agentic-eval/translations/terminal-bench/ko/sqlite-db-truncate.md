@@ -1,0 +1,1 @@
+`/app/trunc.db`에 바이너리 truncation으로 인해 손상된 sqlite 데이터베이스가 있습니다. 가능한 한 많은 행을 복구하고, `/app/recover.json`에 JSON 파일을 생성하세요. 출력은 `[{"word": "testwordXY", "value": M}, {"word": "testwordZZ","value": N}, ...]` 형식이어야 합니다.

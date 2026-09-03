@@ -1,0 +1,1528 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LLMLingua 시리즈 완전 정리 — 동작 원리와 실전 가이드</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2430; --line:#2b3440;
+    --tx:#e6edf3; --tx2:#9aa7b4; --tx3:#6e7c8c;
+    --a1:#58a6ff; --a2:#7ee787; --a3:#ffa657; --a4:#d2a8ff; --a5:#ff7b72;
+    --radius:14px;
+  }
+  body.light{
+    --bg:#ffffff; --panel:#f6f8fa; --panel2:#eaeef2; --line:#d0d7de;
+    --tx:#1f2328; --tx2:#57606a; --tx3:#818b98;
+    --a1:#0969da; --a2:#1a7f37; --a3:#bc4c00; --a4:#8250df; --a5:#cf222e;
+  }
+  body.light header{
+    background:
+      radial-gradient(1000px 400px at 15% -10%, rgba(9,105,218,.16), transparent 60%),
+      radial-gradient(800px 400px at 85% 0%, rgba(130,80,223,.14), transparent 60%),
+      linear-gradient(180deg,#f2f6fb,#ffffff);
+  }
+  body.light .chip, body.light code{background:rgba(0,0,0,.05)}
+  body.light tbody tr:hover{background:rgba(0,0,0,.02)}
+  body.light .card:hover{border-color:#a8b3bf;box-shadow:0 4px 14px rgba(0,0,0,.06)}
+  body.light pre{background:#0d1117;color:#e6edf3}
+  body.light .tabbar{background:rgba(255,255,255,.88)}
+
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--tx);
+    font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR",Segoe UI,sans-serif;
+    line-height:1.7; -webkit-font-smoothing:antialiased;
+  }
+  code,pre{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace}
+  code{background:rgba(255,255,255,.07);padding:.12em .42em;border-radius:5px;font-size:.87em}
+  pre{
+    background:#010409;border:1px solid var(--line);border-radius:10px;
+    padding:14px 16px;overflow-x:auto;font-size:.8rem;line-height:1.6;margin:12px 0;color:#c9d1d9;
+  }
+  pre .c{color:#6e7c8c}
+  pre .g{color:#7ee787}
+  pre .r{color:#ff7b72}
+  pre .b{color:#58a6ff}
+  pre .y{color:#ffa657}
+  pre .p{color:#d2a8ff}
+
+  #toggle{
+    position:fixed;top:16px;right:16px;z-index:99;cursor:pointer;
+    background:var(--panel);color:var(--tx);border:1px solid var(--line);
+    padding:8px 14px;border-radius:20px;
+    font-family:inherit;font-size:.83rem;font-weight:600;
+  }
+  #toggle:hover{border-color:var(--a1)}
+
+  header{
+    padding:76px 24px 58px;
+    background:
+      radial-gradient(1000px 400px at 15% -10%, rgba(88,166,255,.16), transparent 60%),
+      radial-gradient(800px 400px at 85% 0%, rgba(210,168,255,.13), transparent 60%),
+      linear-gradient(180deg,#111823,#0d1117);
+    border-bottom:1px solid var(--line);
+  }
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+  header h1{margin:0 0 14px;font-size:2.4rem;letter-spacing:-.02em;line-height:1.25}
+  header h1 span{color:var(--a1)}
+  .sub{color:var(--tx2);font-size:1.04rem;max-width:800px;margin:0}
+  .meta{margin-top:26px;display:flex;gap:26px;flex-wrap:wrap;font-size:.85rem;color:var(--tx3)}
+  .meta b{color:var(--tx2);font-weight:600}
+
+  .tabbar{
+    position:sticky;top:0;z-index:50;
+    background:rgba(13,17,23,.86);backdrop-filter:blur(12px);
+    border-bottom:1px solid var(--line);
+  }
+  .tabbar .wrap{display:flex;gap:6px;padding-top:10px;padding-bottom:10px;flex-wrap:wrap}
+  .tab{
+    background:transparent;border:1px solid transparent;border-radius:10px;
+    padding:9px 17px;cursor:pointer;font-family:inherit;font-size:.9rem;font-weight:600;
+    color:var(--tx3);transition:.15s;
+  }
+  .tab:hover{color:var(--tx);background:var(--panel)}
+  .tab.on{color:var(--tx);background:var(--panel);border-color:var(--line)}
+  .tab.on::after{content:"";display:block;height:2px;background:var(--a1);border-radius:2px;margin-top:7px}
+  .pane{display:none}
+  .pane.on{display:block}
+
+  section{padding:50px 0;border-bottom:1px solid var(--line)}
+  h2{display:flex;align-items:center;gap:12px;margin:0 0 8px;font-size:1.5rem;letter-spacing:-.01em}
+  .num{
+    display:inline-flex;align-items:center;justify-content:center;
+    width:30px;height:30px;border-radius:9px;flex:none;
+    font-size:.82rem;font-weight:700;color:var(--bg);background:var(--a1);
+  }
+  h3{margin:30px 0 10px;font-size:1.08rem;color:var(--tx)}
+  h4{margin:22px 0 8px;font-size:1rem;color:var(--tx)}
+  .lead{color:var(--tx2);margin:0 0 22px;font-size:.98rem}
+  p{color:var(--tx2);font-size:.94rem}
+
+  .grid{display:grid;gap:14px;margin:18px 0}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g4{grid-template-columns:repeat(4,1fr)}
+  @media(max-width:820px){.g2,.g3,.g4{grid-template-columns:1fr}}
+
+  .card{
+    background:var(--panel);border:1px solid var(--line);
+    border-radius:var(--radius);padding:18px 20px;transition:.15s;
+  }
+  .card:hover{border-color:#3d4a5c}
+  .card b{display:block;margin-bottom:6px;font-size:.95rem;color:var(--tx)}
+  .card p{margin:0;color:var(--tx2);font-size:.9rem}
+  .card ul{margin:8px 0 0;padding-left:18px;color:var(--tx2);font-size:.88rem}
+  .card li{margin:3px 0}
+
+  .kpi{text-align:center;padding:22px 14px}
+  .kpi .v{font-size:1.9rem;font-weight:700;letter-spacing:-.02em}
+  .kpi .l{font-size:.8rem;color:var(--tx3);margin-top:4px}
+
+  table{width:100%;border-collapse:collapse;margin:16px 0;font-size:.88rem}
+  th,td{padding:11px 13px;border:1px solid var(--line);text-align:left;vertical-align:top}
+  thead th{background:var(--panel2);color:var(--tx);font-weight:600;font-size:.82rem}
+  tbody tr:hover{background:rgba(255,255,255,.02)}
+  td code{font-size:.82em}
+
+  .chip{
+    display:inline-block;padding:2px 9px;border-radius:999px;
+    font-size:.72rem;font-weight:700;border:1px solid var(--line);
+    background:rgba(128,128,128,.14);color:var(--tx2);
+  }
+  .c-v1{background:rgba(88,166,255,.16);border-color:rgba(88,166,255,.4);color:var(--a1)}
+  .c-long{background:rgba(255,166,87,.15);border-color:rgba(255,166,87,.4);color:var(--a3)}
+  .c-v2{background:rgba(126,231,135,.14);border-color:rgba(126,231,135,.38);color:var(--a2)}
+  .c-no{background:rgba(255,123,114,.13);border-color:rgba(255,123,114,.38);color:var(--a5)}
+  .c-ok{background:rgba(126,231,135,.14);border-color:rgba(126,231,135,.38);color:var(--a2)}
+
+  .note{
+    border-left:3px solid var(--a3);background:rgba(255,166,87,.07);
+    padding:13px 18px;border-radius:0 10px 10px 0;font-size:.9rem;color:var(--tx2);margin:16px 0;
+  }
+  .note b{color:var(--tx)}
+  .note.ok{border-color:var(--a2);background:rgba(126,231,135,.07)}
+  .note.bad{border-color:var(--a5);background:rgba(255,123,114,.07)}
+  .note.info{border-color:var(--a1);background:rgba(88,166,255,.07)}
+
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:820px){.split{grid-template-columns:1fr}}
+
+  /* pipeline */
+  .pipe{display:flex;flex-direction:column;gap:0;margin:20px 0}
+  .prow{display:grid;grid-template-columns:52px 1fr;gap:16px}
+  .pcol{display:flex;flex-direction:column;align-items:center}
+  .pdot{
+    width:34px;height:34px;border-radius:50%;flex:none;
+    display:flex;align-items:center;justify-content:center;
+    font-size:.8rem;font-weight:700;color:var(--bg);
+  }
+  .pline{width:2px;flex:1;background:var(--line);margin:4px 0}
+  .pbody{padding-bottom:22px;min-width:0}
+  .pbody h4{margin:4px 0 4px;font-size:1rem;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .pbody p{margin:0;font-size:.9rem}
+
+  /* token viz */
+  .tokline{
+    display:flex;flex-wrap:wrap;gap:5px;margin:12px 0;
+    font-family:"SF Mono",ui-monospace,monospace;font-size:.82rem;
+  }
+  .tok{padding:3px 8px;border-radius:6px;border:1px solid var(--line);background:var(--panel2);color:var(--tx2)}
+  .tok.keep{background:rgba(126,231,135,.16);border-color:rgba(126,231,135,.45);color:var(--a2);font-weight:600}
+  .tok.drop{background:rgba(255,123,114,.10);border-color:rgba(255,123,114,.3);color:var(--tx3);text-decoration:line-through;opacity:.65}
+  .toklegend{display:flex;gap:16px;font-size:.8rem;color:var(--tx3);margin-top:6px;flex-wrap:wrap}
+
+  /* worked example */
+  .exwrap{
+    border:1px solid var(--line);border-radius:var(--radius);
+    background:var(--panel);margin:20px 0;overflow:hidden;
+  }
+  .exhead{
+    padding:12px 20px;background:var(--panel2);border-bottom:1px solid var(--line);
+    display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  }
+  .exhead b{font-size:.95rem;color:var(--tx)}
+  .exhead .cnt{
+    margin-left:auto;font-family:"SF Mono",ui-monospace,monospace;
+    font-size:.78rem;color:var(--tx3);
+  }
+  .exbody{padding:16px 20px}
+  .exbody p{margin:0 0 10px;font-size:.9rem}
+  .exbody p:last-child{margin-bottom:0}
+
+  .doc{
+    border:1px solid var(--line);border-radius:9px;padding:11px 14px;margin:8px 0;
+    background:var(--panel2);font-size:.86rem;color:var(--tx2);
+  }
+  .doc .dl{
+    font-family:"SF Mono",ui-monospace,monospace;font-size:.73rem;
+    font-weight:700;letter-spacing:.03em;margin-bottom:5px;display:flex;
+    align-items:center;gap:8px;flex-wrap:wrap;
+  }
+  .doc.hit{border-color:rgba(126,231,135,.45);background:rgba(126,231,135,.06)}
+  .doc.hit .dl{color:var(--a2)}
+  .doc.mid{border-color:rgba(255,166,87,.4);background:rgba(255,166,87,.05)}
+  .doc.mid .dl{color:var(--a3)}
+  .doc.out{border-color:rgba(255,123,114,.35);background:rgba(255,123,114,.04);opacity:.62}
+  .doc.out .dl{color:var(--a5)}
+  .doc.lock{border-color:rgba(88,166,255,.4);background:rgba(88,166,255,.06)}
+  .doc.lock .dl{color:var(--a1)}
+
+  .score{
+    font-family:"SF Mono",ui-monospace,monospace;font-size:.72rem;
+    padding:1px 7px;border-radius:5px;background:rgba(128,128,128,.18);color:var(--tx2);
+  }
+  .arrowdown{
+    text-align:center;color:var(--tx3);font-size:1.15rem;margin:2px 0 6px;letter-spacing:.2em;
+  }
+  .ppl{
+    display:grid;grid-template-columns:118px 1fr 54px;gap:10px;align-items:center;
+    margin:6px 0;font-size:.83rem;
+  }
+  .ppl .w{font-family:"SF Mono",ui-monospace,monospace;color:var(--tx2)}
+  .ppl .track{height:16px;background:rgba(128,128,128,.15);border-radius:5px;overflow:hidden}
+  .ppl .track i{display:block;height:100%;border-radius:5px}
+  .ppl .v{font-family:"SF Mono",ui-monospace,monospace;font-size:.76rem;color:var(--tx3);text-align:right}
+
+  /* bars */
+  .bar-row{display:grid;grid-template-columns:130px 1fr 78px;gap:12px;align-items:center;margin:9px 0;font-size:.85rem}
+  .bar{height:22px;background:rgba(128,128,128,.15);border-radius:6px;overflow:hidden}
+  .bar i{display:block;height:100%;border-radius:6px}
+  .bar-row span:last-child{color:var(--tx3);text-align:right;font-size:.8rem}
+
+  h3.tut{
+    display:flex;align-items:center;margin:34px 0 8px;
+    padding-top:18px;border-top:1px solid var(--line);font-size:1.14rem;
+  }
+  h3.tut:first-of-type{border-top:none;padding-top:0}
+  .stepnum{
+    display:inline-flex;align-items:center;justify-content:center;
+    width:26px;height:26px;border-radius:8px;flex:none;margin-right:9px;
+    font-size:.78rem;font-weight:700;color:var(--bg);background:var(--a2);
+  }
+  .filepath{
+    display:inline-block;margin:14px 0 0;padding:5px 12px;border-radius:8px 8px 0 0;
+    background:var(--panel2);border:1px solid var(--line);border-bottom:none;
+    font-family:"SF Mono",ui-monospace,monospace;font-size:.76rem;color:var(--a1);font-weight:600;
+  }
+  .filepath + pre{margin-top:0;border-top-left-radius:0}
+  .chk{list-style:none;padding-left:0;margin:14px 0}
+  .chk li{padding:9px 0 9px 30px;position:relative;font-size:.9rem;color:var(--tx2);border-bottom:1px dashed var(--line)}
+  .chk li:last-child{border-bottom:none}
+  .chk li::before{content:"☐";position:absolute;left:4px;top:9px;color:var(--a2);font-size:1rem}
+  .chk li b{color:var(--tx)}
+
+  footer{padding:44px 24px 70px;color:var(--tx3);font-size:.86rem}
+  footer a{color:var(--a1);text-decoration:none}
+  footer a:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<button id="toggle">◐ 라이트</button>
+
+<header>
+  <div class="wrap">
+    <h1><span>LLMLingua</span> 시리즈 완전 정리</h1>
+    <p class="sub">
+      Microsoft의 <b style="color:var(--tx)">프롬프트 압축</b> 3부작 —
+      LLMLingua · LongLLMLingua · LLMLingua-2.
+      동작 원리부터 실전 코드, 선택 기준까지 이 문서 하나로 정리합니다.
+    </p>
+    <div class="meta">
+      <div><b>저장소</b> microsoft/LLMLingua</div>
+      <div><b>설치</b> pip install llmlingua</div>
+      <div><b>최대 압축</b> 20x</div>
+      <div><b>논문</b> EMNLP'23 · ACL'24 · ACL'24 Findings</div>
+    </div>
+  </div>
+</header>
+
+<nav class="tabbar">
+  <div class="wrap">
+    <button class="tab on" data-pane="intro">📘 개요 &amp; 원리</button>
+    <button class="tab" data-pane="compare">⚖️ 3가지 비교</button>
+    <button class="tab" data-pane="tutorial">🛠 실전 개발 순서</button>
+    <button class="tab" data-pane="advanced">🔬 심화 &amp; 튜닝</button>
+  </div>
+</nav>
+
+<!-- ============================================================ -->
+<!-- ======================= PANE 1 : INTRO ===================== -->
+<!-- ============================================================ -->
+<div class="pane on" id="pane-intro">
+
+<section><div class="wrap">
+  <h2><span class="num">1</span> 왜 프롬프트를 압축하나</h2>
+  <p class="lead">LLM을 실제로 쓰다 보면 부딪히는 3가지 벽이 있습니다.</p>
+
+  <div class="grid g3">
+    <div class="card"><b>💰 비용</b><p>API는 <b>토큰당 과금</b>. 긴 RAG 컨텍스트를 매번 보내면 비용이 선형으로 증가합니다.</p></div>
+    <div class="card"><b>📏 길이 제한</b><p>컨텍스트 윈도우를 넘으면 아예 요청이 실패합니다.</p></div>
+    <div class="card"><b>🕳 Lost in the Middle</b><p>컨텍스트가 길면 <b>중간에 있는 정보를 놓칩니다.</b> 길다고 좋은 게 아닙니다.</p></div>
+  </div>
+
+  <h3>핵심 통찰 — 자연어에는 잉여(redundancy)가 많다</h3>
+  <p>
+    LLMLingua의 출발점은 정보이론입니다.
+    사람이 쓴 문장에는 <b style="color:var(--tx)">모델이 이미 예측할 수 있는 토큰</b>이 잔뜩 들어있습니다.
+    예측 가능한 토큰은 <b>정보량이 적으므로 지워도 손실이 적습니다.</b>
+  </p>
+
+  <div class="tokline">
+    <span class="tok keep">Sam</span>
+    <span class="tok keep">bought</span>
+    <span class="tok drop">a</span>
+    <span class="tok keep">dozen</span>
+    <span class="tok keep">boxes</span>
+    <span class="tok drop">,</span>
+    <span class="tok drop">each</span>
+    <span class="tok drop">with</span>
+    <span class="tok keep">30</span>
+    <span class="tok keep">highlighter</span>
+    <span class="tok keep">pens</span>
+    <span class="tok drop">inside</span>
+    <span class="tok drop">,</span>
+    <span class="tok drop">for</span>
+    <span class="tok keep">$10</span>
+    <span class="tok drop">each</span>
+    <span class="tok keep">box</span>
+  </div>
+  <div class="toklegend">
+    <span><b style="color:var(--a2)">■ 유지</b> — 예측 불가 = 정보량 높음</span>
+    <span><b style="color:var(--a5)">■ 제거</b> — 예측 가능 = 잉여</span>
+  </div>
+
+  <div class="note info">
+    <b>놀라운 점.</b> 압축된 프롬프트는 사람이 읽으면 깨진 문장처럼 보이지만,
+    <b>LLM은 여전히 의미를 복원해 정답을 냅니다.</b>
+    실제로 GPT-4는 압축 프롬프트에서 원래 정보를 거의 전부 복구할 수 있습니다.
+  </div>
+
+  <h3>실제 압축 예시 (공식 README)</h3>
+<pre><span class="c"># 원본 2,365 토큰 → 압축 211 토큰 (11.2x)</span>
+{
+  <span class="b">'compressed_prompt'</span>: <span class="g">'Question: Sam bought a dozen boxes, each with 30 highlighter
+    pens inside, for $10 each box. He reanged five of boxes into packages of
+    sixlters each and sold them $3 per...'</span>,
+  <span class="b">'origin_tokens'</span>:     <span class="y">2365</span>,
+  <span class="b">'compressed_tokens'</span>: <span class="y">211</span>,
+  <span class="b">'ratio'</span>:  <span class="g">'11.2x'</span>,
+  <span class="b">'saving'</span>: <span class="g">', Saving $0.1 in GPT-4.'</span>
+}</pre>
+  <p style="font-size:.9rem">
+    <code>reanged</code>, <code>sixlters</code> 처럼 단어가 깨져 보이죠.
+    <b>토큰 단위로 지우기 때문</b>입니다. 그래도 모델은 문제를 풉니다.
+  </p>
+</div></section>
+
+<section><div class="wrap">
+  <h2><span class="num">2</span> 기본 동작 원리 — 3단계 파이프라인</h2>
+  <p class="lead">
+    LLMLingua는 <b>작은 모델</b>(GPT2-small, LLaMA-7B 등)로 각 토큰의 중요도를 재고,
+    덜 중요한 것부터 지웁니다. <b style="color:var(--tx)">큰 모델은 전혀 건드리지 않습니다.</b>
+  </p>
+
+  <div class="pipe">
+    <div class="prow">
+      <div class="pcol"><div class="pdot" style="background:var(--a1)">1</div><div class="pline"></div></div>
+      <div class="pbody">
+        <h4>Budget Controller — 예산 배분 <span class="chip">거친 단계</span></h4>
+        <p>
+          프롬프트를 <b>instruction / context / question</b>으로 나누고 부분별 압축 강도를 정합니다.
+          핵심은 <b>민감도가 다르다</b>는 것입니다.
+        </p>
+<pre><span class="c"># 압축 민감도</span>
+instruction  <span class="r">높음</span>  <span class="c">← 지시문이 망가지면 치명적. 거의 안 건드림</span>
+question     <span class="r">높음</span>  <span class="c">← 질문이 망가지면 답이 산으로 감</span>
+context      <span class="g">낮음</span>  <span class="c">← 문서·예시는 과감히 압축 가능</span></pre>
+        <p>이 단계에서 <b>문서(context) 단위로 통째 버리기</b>도 수행합니다 (<code>use_context_level_filter</code>).</p>
+      </div>
+    </div>
+
+    <div class="prow">
+      <div class="pcol"><div class="pdot" style="background:var(--a1)">2</div><div class="pline"></div></div>
+      <div class="pbody">
+        <h4>Iterative Token-level Compression — 반복 토큰 압축 <span class="chip">핵심</span></h4>
+        <p>
+          남은 텍스트를 <b><code>iterative_size</code>(기본 200) 토큰씩 끊어가며</b>
+          작은 모델로 perplexity(당황도)를 계산합니다.
+        </p>
+<pre><span class="c"># 개념</span>
+<span class="p">for</span> segment <span class="p">in</span> chunks(text, size=<span class="y">200</span>):
+    ppl = small_model.perplexity(segment)   <span class="c"># 토큰별 예측 난이도</span>
+    keep = ppl &gt; threshold                  <span class="c"># 예측 어려운 것 = 정보량 큼 → 유지</span>
+    text = text[keep]</pre>
+        <div class="note" style="margin:10px 0 0">
+          <b>왜 "반복(iterative)"인가?</b> 토큰을 지우면 <b>남은 토큰의 확률 분포가 바뀝니다.</b>
+          한 번에 전부 계산하면 이 상호작용을 놓치므로, 조각씩 순차 처리하며
+          앞서 압축된 결과를 반영합니다.
+        </div>
+      </div>
+    </div>
+
+    <div class="prow">
+      <div class="pcol"><div class="pdot" style="background:var(--a1)">3</div></div>
+      <div class="pbody">
+        <h4>Distribution Alignment — 분포 정렬</h4>
+        <p>
+          작은 모델과 큰 모델(GPT-4 등)은 <b>토큰 확률 분포가 다릅니다.</b>
+          작은 모델이 "쉽다"고 본 토큰이 큰 모델에겐 중요할 수 있죠.
+          이 간극을 줄이기 위해 작은 모델을 큰 모델의 출력에 맞춰 정렬합니다.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <h3>정리</h3>
+<pre>원본 프롬프트
+   ↓  <span class="b">① Budget Controller</span>     — 부분별 예산 + 문서 단위 필터
+   ↓  <span class="b">② Iterative Token</span>       — 200토큰씩 perplexity 기반 삭제
+   ↓  <span class="b">③ Distribution Align</span>    — 작은 모델 ↔ 큰 모델 간극 보정
+압축 프롬프트  →  <span class="g">GPT-4 등 대형 모델로 전송</span></pre>
+
+  <div class="note ok">
+    <b>가장 큰 장점 — LLM 재학습이 전혀 필요 없습니다.</b>
+    압축은 순수히 <b>전처리</b>입니다. 기존 파이프라인 앞에 끼워 넣기만 하면 됩니다.
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <h2><span class="num">3</span> 예시로 따라가는 전체 흐름</h2>
+  <p class="lead">
+    사내 규정 챗봇 시나리오입니다. 실제 입력을 넣고
+    <b style="color:var(--tx)">3단계를 거치며 무엇이 어떻게 지워지는지</b> 끝까지 따라가 봅니다.
+  </p>
+
+  <!-- ===== 입력 ===== -->
+  <div class="exwrap">
+    <div class="exhead">
+      <b>📥 입력 — 압축 전 원본</b>
+      <span class="cnt">약 1,000 토큰</span>
+    </div>
+    <div class="exbody">
+      <div class="doc lock">
+        <div class="dl">INSTRUCTION</div>
+        아래 사내 규정 문서를 참고하여 질문에 정확히 답하세요. 근거가 없으면 모른다고 답하세요.
+      </div>
+
+      <div class="doc">
+        <div class="dl">CONTEXT — 문서 1 (연차 규정)</div>
+        제12조(연차휴가의 이월) 회사는 근로기준법에 따라 연차유급휴가를 부여한다.
+        미사용 연차는 다음 해로 <b style="color:var(--tx)">최대 5일까지 이월</b>할 수 있으며,
+        이월된 연차는 이월된 해의 6월 30일까지 사용하여야 한다. 기간 내 미사용 시 소멸된다.
+      </div>
+
+      <div class="doc">
+        <div class="dl">CONTEXT — 문서 2 (출장비 규정)</div>
+        제31조(출장비) 국내 출장 시 일비는 2만원, 숙박비는 실비로 정산한다.
+        해외 출장의 경우 지역 등급에 따라 차등 지급하며, 항공권은 이코노미석을 원칙으로 한다.
+      </div>
+
+      <div class="doc">
+        <div class="dl">CONTEXT — 문서 3 (휴가 신청 절차)</div>
+        제14조(휴가 신청) 연차 사용 희망일 3일 전까지 그룹웨어를 통해 신청하여야 하며,
+        팀장의 승인을 받아야 한다. 이월 연차도 동일한 절차를 따른다.
+      </div>
+
+      <div class="doc lock">
+        <div class="dl">QUESTION</div>
+        연차는 며칠까지 이월되나요?
+      </div>
+    </div>
+  </div>
+
+  <div class="arrowdown">▼ ▼ ▼</div>
+
+  <!-- ===== STAGE 1 ===== -->
+  <div class="exwrap">
+    <div class="exhead">
+      <b>① Budget Controller — 예산 배분 &amp; 문서 선별</b>
+      <span class="cnt">1,000 → 약 620 토큰</span>
+    </div>
+    <div class="exbody">
+      <p><b>먼저 부분별 압축 민감도에 따라 예산을 나눕니다.</b></p>
+<pre>INSTRUCTION  <span class="r">민감도 높음</span>  → 압축률 <span class="g">0.9</span>  <span class="c"># 거의 손대지 않음</span>
+QUESTION     <span class="r">민감도 높음</span>  → 압축률 <span class="g">1.0</span>  <span class="c"># 그대로 보존</span>
+CONTEXT      <span class="g">민감도 낮음</span>  → 압축률 <span class="y">0.4</span>  <span class="c"># 여기서 대부분 절감</span></pre>
+
+      <p style="margin-top:14px"><b>다음으로 문서 단위 필터링</b> (<code>use_context_level_filter=True</code>)</p>
+      <p style="font-size:.87rem;color:var(--tx3)">
+        각 문서가 질문과 얼마나 관련 있는지 점수를 매기고, 예산에 안 맞는 문서는 <b>통째로 버립니다.</b>
+      </p>
+
+      <div class="doc hit">
+        <div class="dl">문서 1 · 연차 이월 <span class="score">관련도 0.94</span> <span class="chip c-ok">유지</span></div>
+        "이월", "연차", "5일" — 질문의 핵심어와 직접 일치
+      </div>
+      <div class="doc out">
+        <div class="dl">문서 2 · 출장비 <span class="score">관련도 0.06</span> <span class="chip c-no">✗ 제거</span></div>
+        연차와 무관한 내용 → <b>문서 통째로 삭제</b>
+      </div>
+      <div class="doc mid">
+        <div class="dl">문서 3 · 신청 절차 <span class="score">관련도 0.41</span> <span class="chip">약하게 유지</span></div>
+        "이월 연차"가 언급되나 "며칠"에 대한 답은 없음 → 남기되 강하게 압축
+      </div>
+
+      <div class="note info" style="margin-top:14px">
+        <b>이 단계가 가장 효율이 좋습니다.</b> 관련 없는 문서 하나를 통째로 버리는 것이
+        토큰을 하나씩 지우는 것보다 훨씬 크게 절감됩니다.
+        RAG에서 검색기가 문서를 10개 가져왔다면 실제로 필요한 건 2~3개인 경우가 많습니다.
+      </div>
+    </div>
+  </div>
+
+  <div class="arrowdown">▼ ▼ ▼</div>
+
+  <!-- ===== STAGE 2 ===== -->
+  <div class="exwrap">
+    <div class="exhead">
+      <b>② Iterative Token-level Compression — 토큰 단위 삭제</b>
+      <span class="cnt">620 → 약 180 토큰</span>
+    </div>
+    <div class="exbody">
+      <p>
+        남은 텍스트를 <b>200 토큰씩 끊어서</b> 작은 모델에 넣고,
+        각 토큰의 <b>perplexity(예측 난이도)</b>를 잽니다.
+      </p>
+
+      <h4 style="margin-top:16px">문서 1의 한 구절을 실제로 계산해보면</h4>
+      <p style="font-size:.87rem;color:var(--tx3);margin-bottom:12px">
+        막대가 길수록 "예측하기 어려운 = 정보량이 큰" 토큰입니다.
+      </p>
+
+      <div class="ppl"><span class="w">미사용</span><div class="track"><i style="width:78%;background:var(--a2)"></i></div><span class="v">7.8</span></div>
+      <div class="ppl"><span class="w">연차</span><div class="track"><i style="width:71%;background:var(--a2)"></i></div><span class="v">7.1</span></div>
+      <div class="ppl"><span class="w">는</span><div class="track"><i style="width:9%;background:var(--a5)"></i></div><span class="v">0.9</span></div>
+      <div class="ppl"><span class="w">다음</span><div class="track"><i style="width:31%;background:var(--a3)"></i></div><span class="v">3.1</span></div>
+      <div class="ppl"><span class="w">해로</span><div class="track"><i style="width:14%;background:var(--a5)"></i></div><span class="v">1.4</span></div>
+      <div class="ppl"><span class="w">최대</span><div class="track"><i style="width:66%;background:var(--a2)"></i></div><span class="v">6.6</span></div>
+      <div class="ppl"><span class="w">5일</span><div class="track"><i style="width:95%;background:var(--a2)"></i></div><span class="v">9.5</span></div>
+      <div class="ppl"><span class="w">까지</span><div class="track"><i style="width:18%;background:var(--a5)"></i></div><span class="v">1.8</span></div>
+      <div class="ppl"><span class="w">이월</span><div class="track"><i style="width:82%;background:var(--a2)"></i></div><span class="v">8.2</span></div>
+      <div class="ppl"><span class="w">할 수 있으며</span><div class="track"><i style="width:11%;background:var(--a5)"></i></div><span class="v">1.1</span></div>
+
+      <p style="margin-top:14px"><b>임계값 위만 남기면:</b></p>
+      <div class="tokline">
+        <span class="tok keep">미사용</span>
+        <span class="tok keep">연차</span>
+        <span class="tok drop">는</span>
+        <span class="tok drop">다음</span>
+        <span class="tok drop">해로</span>
+        <span class="tok keep">최대</span>
+        <span class="tok keep">5일</span>
+        <span class="tok drop">까지</span>
+        <span class="tok keep">이월</span>
+        <span class="tok drop">할 수 있으며</span>
+      </div>
+      <p style="font-size:.88rem">
+        결과: <code style="color:var(--a2)">미사용 연차 최대 5일 이월</code>
+        — 조사와 어미가 사라져 어색하지만 <b style="color:var(--tx)">핵심 정보는 전부 살아있습니다.</b>
+      </p>
+
+      <div class="note" style="margin-top:14px">
+        <b>왜 "반복(iterative)"인가.</b>
+        <code>"할 수 있으며"</code>를 지우고 나면 그 뒤 문장의 확률 분포가 달라집니다.
+        전체를 한 번에 계산하면 이 상호작용을 놓치므로,
+        <b>200토큰 조각을 순서대로 처리하며 앞선 압축 결과를 반영</b>합니다.
+      </div>
+    </div>
+  </div>
+
+  <div class="arrowdown">▼ ▼ ▼</div>
+
+  <!-- ===== STAGE 3 ===== -->
+  <div class="exwrap">
+    <div class="exhead">
+      <b>③ Distribution Alignment — 분포 정렬</b>
+      <span class="cnt">토큰 수 변화 없음</span>
+    </div>
+    <div class="exbody">
+      <p>
+        판정을 내린 건 <b>작은 모델</b>(LLaMA-7B)인데, 실제로 이 프롬프트를 읽을 모델은
+        <b>GPT-4</b>입니다. 두 모델은 <b style="color:var(--tx)">토큰 확률 분포가 다릅니다.</b>
+      </p>
+<pre><span class="c"># 예: 법률 용어 "소멸된다"</span>
+작은 모델   → <span class="r">"흔한 표현이네, 지워도 됨"</span>
+GPT-4      → <span class="g">"법적 효력을 결정하는 핵심어"</span>
+
+<span class="c"># 이 간극을 방치하면 중요한 토큰이 잘못 삭제됨</span></pre>
+      <p>
+        그래서 작은 모델을 <b>큰 모델의 출력 분포에 맞춰 정렬</b>합니다.
+        토큰 수는 그대로지만 <b>어떤 토큰을 남길지의 판단 품질이 올라갑니다.</b>
+      </p>
+    </div>
+  </div>
+
+  <div class="arrowdown">▼ ▼ ▼</div>
+
+  <!-- ===== 출력 ===== -->
+  <div class="exwrap" style="border-color:rgba(126,231,135,.45)">
+    <div class="exhead" style="background:rgba(126,231,135,.08)">
+      <b>📤 출력 — 압축 결과</b>
+      <span class="cnt" style="color:var(--a2)">1,000 → 180 토큰 (5.6x)</span>
+    </div>
+    <div class="exbody">
+<pre>아래 사내 규정 참고 질문 답. 근거 없으면 모른다 답.
+
+제12조 연차휴가 이월 근로기준법 연차유급휴가 부여.
+<span class="g">미사용 연차 최대 5일 이월</span>, 이월 연차 6월 30일까지 사용.
+기간 미사용 소멸.
+
+제14조 휴가 신청 3일 전 그룹웨어 신청, 팀장 승인. 이월 연차 동일.
+
+<span class="b">연차는 며칠까지 이월되나요?</span></pre>
+
+      <div class="split" style="margin-top:16px">
+        <div class="card" style="border-color:rgba(126,231,135,.35)">
+          <b>✅ 살아남은 것</b>
+          <ul>
+            <li><b>5일</b> — 정답의 핵심 숫자</li>
+            <li><b>이월 / 미사용 / 연차</b> — 핵심 개념어</li>
+            <li><b>6월 30일 / 소멸</b> — 조건</li>
+            <li><b>질문 전체</b> — 손대지 않음</li>
+          </ul>
+        </div>
+        <div class="card" style="border-color:rgba(255,123,114,.35)">
+          <b>❌ 사라진 것</b>
+          <ul>
+            <li><b>문서 2 전체</b> — 출장비 (무관)</li>
+            <li>조사 · 어미 (<code>는</code>, <code>할 수 있으며</code>)</li>
+            <li>수식어 (<code>정확히</code>, <code>원칙으로</code>)</li>
+            <li>문서 3의 세부 설명</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="note ok" style="margin-top:16px">
+        <b>GPT-4에게 이 압축 프롬프트를 주면?</b><br>
+        → <b>"미사용 연차는 최대 5일까지 이월 가능하며, 이월된 연차는 다음 해 6월 30일까지 사용해야 합니다."</b><br>
+        <span style="color:var(--tx3);font-size:.9em">
+        원본을 넣었을 때와 <b>동일한 답</b>입니다. 토큰은 82% 절감했고요.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 단계별 기여도 -->
+  <h3>단계별 절감 기여도</h3>
+  <div class="bar-row"><span>원본</span><div class="bar"><i style="width:100%;background:var(--tx3)"></i></div><span>1,000</span></div>
+  <div class="bar-row"><span>① 문서 필터 후</span><div class="bar"><i style="width:62%;background:var(--a1)"></i></div><span>620</span></div>
+  <div class="bar-row"><span>② 토큰 압축 후</span><div class="bar"><i style="width:18%;background:var(--a2)"></i></div><span>180</span></div>
+
+  <table>
+    <thead><tr><th style="width:180px">단계</th><th style="width:120px">절감</th><th>주된 역할</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>① Budget Controller</b></td>
+        <td><b style="color:var(--a1)">−380</b> (38%)</td>
+        <td>무관한 <b>문서를 통째로 제거</b>. 가장 효율적이지만 잘못 버리면 <b>답을 못 함</b></td>
+      </tr>
+      <tr>
+        <td><b>② Iterative Token</b></td>
+        <td><b style="color:var(--a2)">−440</b> (44%)</td>
+        <td>남은 문서에서 <b>조사·어미·수식어 제거</b>. 문장은 깨지지만 의미는 유지</td>
+      </tr>
+      <tr>
+        <td><b>③ Distribution Align</b></td>
+        <td>0</td>
+        <td>토큰을 지우지 않음. <b>②의 판단 정확도</b>를 높이는 보정 단계</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note bad">
+    <b>가장 위험한 실패 지점은 ①입니다.</b>
+    ②는 조금 과하게 지워도 모델이 문맥으로 복원하는 경우가 많지만,
+    ①에서 <b>정답이 든 문서를 통째로 버리면 복구 불가능</b>합니다.
+    그래서 RAG에서는 <b>질문을 보고 문서를 고르는 LongLLMLingua</b>가 유리합니다.
+    <span style="color:var(--tx3)">(다음 탭에서 자세히)</span>
+  </div>
+
+  <h3>이 예시를 코드로</h3>
+<pre><span class="p">from</span> llmlingua <span class="p">import</span> PromptCompressor
+
+llm_lingua = PromptCompressor()
+
+docs = [<span class="g">"제12조(연차휴가의 이월)..."</span>,
+        <span class="g">"제31조(출장비)..."</span>,          <span class="c"># ← ①단계에서 제거될 문서</span>
+        <span class="g">"제14조(휴가 신청)..."</span>]
+
+result = llm_lingua.compress_prompt(
+    docs,
+    instruction=<span class="g">"아래 사내 규정 문서를 참고하여 질문에 정확히 답하세요."</span>,
+    question=<span class="g">"연차는 며칠까지 이월되나요?"</span>,
+    target_token=<span class="y">180</span>,
+    force_reserve_digit=<span class="y">True</span>,     <span class="c"># ★ "5일", "6월 30일" 보호</span>
+)
+
+<span class="b">print</span>(result[<span class="g">"compressed_prompt"</span>])
+<span class="b">print</span>(result[<span class="g">"ratio"</span>])        <span class="c"># → '5.6x'</span></pre>
+
+  <div class="note info">
+    <b><code>force_reserve_digit=True</code>에 주목하세요.</b>
+    이 예시에서 <b>"5일"이 사라지면 답을 못 합니다.</b>
+    숫자가 답인 문서를 다룰 때는 반드시 켜야 하는 옵션입니다.
+  </div>
+
+  <p style="font-size:.87rem;color:var(--tx3);margin-top:18px">
+    ※ 위 perplexity 수치와 관련도 점수는 <b>원리 설명을 위한 예시값</b>입니다.
+    실제 값은 사용하는 압축 모델과 문서에 따라 달라집니다.
+  </p>
+</div></section>
+
+</div><!-- /pane-intro -->
+
+
+<!-- ============================================================ -->
+<!-- ====================== PANE 2 : COMPARE ==================== -->
+<!-- ============================================================ -->
+<div class="pane" id="pane-compare">
+
+<section><div class="wrap">
+  <h2><span class="num">1</span> 3가지 한눈에 비교</h2>
+  <p class="lead">같은 <code>PromptCompressor</code> 클래스를 쓰지만 <b>내부 원리가 완전히 다릅니다.</b></p>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:150px">항목</th>
+        <th style="width:250px"><span class="chip c-v1">LLMLingua</span></th>
+        <th style="width:250px"><span class="chip c-long">LongLLMLingua</span></th>
+        <th><span class="chip c-v2">LLMLingua-2</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><b>발표</b></td>
+        <td>EMNLP 2023</td>
+        <td>ACL 2024</td>
+        <td>ACL 2024 Findings</td>
+      </tr>
+      <tr>
+        <td><b>핵심 원리</b></td>
+        <td><b>Perplexity</b> 기반<br>정보량 낮은 토큰 삭제</td>
+        <td>Perplexity + <b>질문 인식</b><br>(question-aware)</td>
+        <td><b>토큰 분류</b><br>(BERT 인코더)</td>
+      </tr>
+      <tr>
+        <td><b>사용 모델</b></td>
+        <td>GPT2-small · LLaMA-7B<br><span style="color:var(--tx3)">인과적 LM (단방향)</span></td>
+        <td>동일 (LLaMA-7B 등)</td>
+        <td>XLM-RoBERTa-large ·<br>mBERT-base<br><span style="color:var(--tx3)">인코더 (양방향)</span></td>
+      </tr>
+      <tr>
+        <td><b>질문 활용</b></td>
+        <td><span class="chip c-no">✗ 미사용</span></td>
+        <td><span class="chip c-ok">✓ 적극 활용</span></td>
+        <td><span class="chip c-no">✗ task-agnostic</span></td>
+      </tr>
+      <tr>
+        <td><b>속도</b></td>
+        <td>기준</td>
+        <td>느림 (질문 조건부 계산 추가)</td>
+        <td><b style="color:var(--a2)">3~6배 빠름</b></td>
+      </tr>
+      <tr>
+        <td><b>OOD 견고성</b></td>
+        <td>보통</td>
+        <td>보통</td>
+        <td><b style="color:var(--a2)">우수</b></td>
+      </tr>
+      <tr>
+        <td><b>GPU 필요</b></td>
+        <td>중~높음 (7B 모델)</td>
+        <td>중~높음</td>
+        <td><b style="color:var(--a2)">낮음</b> (BERT급)</td>
+      </tr>
+      <tr>
+        <td><b>최적 시나리오</b></td>
+        <td>CoT · ICL · 일반 프롬프트</td>
+        <td><b>RAG</b> · 긴 문서 QA</td>
+        <td>실시간 서비스 · 다국어<br>범용 압축</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="grid g3">
+    <div class="card kpi" style="border-color:rgba(88,166,255,.4)">
+      <div class="v" style="color:var(--a1)">20x</div><div class="l">LLMLingua 최대 압축률</div>
+    </div>
+    <div class="card kpi" style="border-color:rgba(255,166,87,.4)">
+      <div class="v" style="color:var(--a3)">+21.4%</div><div class="l">LongLLMLingua RAG 성능 향상<br>(1/4 토큰 사용 시)</div>
+    </div>
+    <div class="card kpi" style="border-color:rgba(126,231,135,.38)">
+      <div class="v" style="color:var(--a2)">3~6x</div><div class="l">LLMLingua-2 속도 향상</div>
+    </div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <h2><span class="num">2</span> LongLLMLingua — 무엇이 추가됐나</h2>
+  <p class="lead">
+    한 문장 요약: <b style="color:var(--tx)">"질문을 알고 압축한다."</b>
+    LLMLingua는 질문을 안 보고 지웠지만, LongLLMLingua는 <b>질문에 답하는 데 필요한 것</b>을 남깁니다.
+  </p>
+
+  <div class="grid g2">
+    <div class="card" style="border-color:rgba(88,166,255,.4)">
+      <b>① Question-aware 압축</b>
+      <p>
+        토큰 중요도를 <b>질문 조건부</b>로 계산합니다.
+        "이 토큰이 질문에 답하는 데 도움이 되는가?"
+      </p>
+<pre style="margin:8px 0 0"><span class="c"># 대비(contrastive) 관점</span>
+중요도 = P(토큰 | 질문 있음)
+       − P(토큰 | 질문 없음)</pre>
+      <p style="margin-top:8px;font-size:.86rem">
+        파라미터: <code>condition_in_question</code>, <code>condition_compare</code>
+      </p>
+    </div>
+    <div class="card" style="border-color:rgba(255,166,87,.4)">
+      <b>② 문서 재정렬 (Reordering)</b>
+      <p>
+        <b>Lost in the Middle</b> 대응. 관련성 높은 문서를 <b>앞쪽으로</b> 옮깁니다.
+        LLM은 앞·뒤를 잘 보고 중간을 놓치니까요.
+      </p>
+<pre style="margin:8px 0 0">reorder_context=<span class="g">"sort"</span></pre>
+    </div>
+    <div class="card" style="border-color:rgba(210,168,255,.4)">
+      <b>③ 동적 압축률</b>
+      <p>
+        모든 문서를 똑같이 압축하지 않습니다.
+        <b>중요한 문서는 살살, 덜 중요한 건 세게</b> 압축합니다.
+      </p>
+<pre style="margin:8px 0 0">dynamic_context_compression_ratio=<span class="y">0.3</span></pre>
+    </div>
+    <div class="card" style="border-color:rgba(126,231,135,.35)">
+      <b>④ 서브시퀀스 복원</b>
+      <p>
+        압축 때문에 <b>고유명사·숫자가 깨지는</b> 문제를 후처리로 보정합니다.
+        모델 응답에서 깨진 조각을 원본과 매칭해 되살립니다.
+      </p>
+<pre style="margin:8px 0 0">llm_lingua.recover(...)</pre>
+    </div>
+  </div>
+
+  <div class="note info">
+    <b>랭킹 방식도 선택 가능.</b> 문서 중요도 계산에
+    <code>longllmlingua</code>(기본), <code>bm25</code>, <code>gzip</code>, <code>sentbert</code>,
+    <code>openai</code>, <code>bge</code>, <code>bge_reranker</code>, <code>cohere</code>,
+    <code>voyageai</code>, <code>jinza</code> 등을 <code>rank_method</code>로 지정할 수 있습니다.
+  </div>
+
+  <div class="note bad">
+    <b>주의 — <code>question</code>이 반드시 필요합니다.</b>
+    <code>rank_method="longllmlingua"</code>인데 <code>question</code>이 비어있으면
+    코드가 <code>assert</code>로 막습니다. 질문 없이 쓰려면 그냥 LLMLingua나 LLMLingua-2를 쓰세요.
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <h2><span class="num">3</span> LLMLingua-2 — 접근 자체가 다르다</h2>
+  <p class="lead">
+    앞의 둘은 <b>perplexity를 계산</b>했습니다. LLMLingua-2는
+    <b style="color:var(--tx)">"이 토큰을 남길까 말까"를 분류(classification)</b>합니다.
+  </p>
+
+  <div class="pipe">
+    <div class="prow">
+      <div class="pcol"><div class="pdot" style="background:var(--a2)">1</div><div class="pline"></div></div>
+      <div class="pbody">
+        <h4>데이터 증류 (Data Distillation)</h4>
+        <p>
+          <b>GPT-4에게 "의미를 유지하며 압축하라"</b>고 시켜 대량의
+          (원문 → 압축문) 쌍을 만듭니다. 이게 학습 데이터가 됩니다.
+        </p>
+      </div>
+    </div>
+    <div class="prow">
+      <div class="pcol"><div class="pdot" style="background:var(--a2)">2</div><div class="pline"></div></div>
+      <div class="pbody">
+        <h4>토큰 라벨링</h4>
+        <p>원문의 각 단어에 <b>keep / drop 라벨</b>을 붙여 <b>이진 분류 문제</b>로 바꿉니다.</p>
+<pre>Sam <span class="g">KEEP</span>   bought <span class="g">KEEP</span>   a <span class="r">DROP</span>   dozen <span class="g">KEEP</span>   boxes <span class="g">KEEP</span></pre>
+      </div>
+    </div>
+    <div class="prow">
+      <div class="pcol"><div class="pdot" style="background:var(--a2)">3</div><div class="pline"></div></div>
+      <div class="pbody">
+        <h4>인코더 학습 <span class="chip">BERT 계열</span></h4>
+        <p>
+          XLM-RoBERTa-large / mBERT-base를 <b>토큰 분류기</b>로 파인튜닝합니다.
+        </p>
+        <div class="note ok" style="margin:10px 0 0">
+          <b>여기가 핵심.</b> BERT는 <b>양방향(bidirectional)</b>이라 문장 전체를 한 번에 보고
+          <b>단 1회 forward pass</b>로 모든 토큰을 판정합니다.
+          반복 계산이 필요한 perplexity 방식보다 <b>3~6배 빠른 이유</b>입니다.
+        </div>
+      </div>
+    </div>
+    <div class="prow">
+      <div class="pcol"><div class="pdot" style="background:var(--a2)">4</div></div>
+      <div class="pbody">
+        <h4>추론 — 확률 높은 토큰만 유지</h4>
+<pre>probs = encoder(text)              <span class="c"># 각 토큰의 KEEP 확률</span>
+keep  = top_k(probs, rate=<span class="y">0.33</span>)     <span class="c"># 상위 33%만 남김</span></pre>
+      </div>
+    </div>
+  </div>
+
+  <h3>왜 "task-agnostic"이 장점인가</h3>
+  <div class="split">
+    <div class="card" style="border-color:rgba(255,166,87,.4)">
+      <b>LongLLMLingua — task-aware</b>
+      <ul>
+        <li>질문을 알아야 압축 가능</li>
+        <li>질문이 바뀌면 <b>다시 압축</b></li>
+        <li>캐싱 어려움</li>
+        <li>대신 <b>그 질문에는 최적</b></li>
+      </ul>
+    </div>
+    <div class="card" style="border-color:rgba(126,231,135,.35)">
+      <b>LLMLingua-2 — task-agnostic</b>
+      <ul>
+        <li>질문 없이 압축 가능</li>
+        <li><b>한 번 압축해 재사용</b> ✅</li>
+        <li>캐싱 쉬움 → 실시간 서비스 적합</li>
+        <li>처음 보는 도메인에도 견고 (OOD)</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>제공 모델 2종</h3>
+  <table>
+    <thead><tr><th style="width:390px">모델</th><th style="width:110px">크기</th><th>특징</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>microsoft/llmlingua-2-xlm-roberta-large-meetingbank</code></td>
+        <td>large</td>
+        <td><b>정확도 우선.</b> 다국어(XLM-R). 기본 권장</td>
+      </tr>
+      <tr>
+        <td><code>microsoft/llmlingua-2-bert-base-multilingual-cased-meetingbank</code></td>
+        <td>base</td>
+        <td><b>속도·경량 우선.</b> 다국어 BERT. 리소스 제약 환경</td>
+      </tr>
+    </tbody>
+  </table>
+  <p style="font-size:.88rem;color:var(--tx3)">
+    ※ 두 모델 모두 <b>MeetingBank</b> 데이터로 학습됐습니다. 자체 도메인 데이터로 재학습하려면
+    저장소의 <code>experiments/llmlingua2/data_collection</code> · <code>model_training</code>을 참고하세요.
+  </p>
+</div></section>
+
+<section><div class="wrap">
+  <h2><span class="num">4</span> 어떤 걸 골라야 하나 — 결정 트리</h2>
+
+<pre>질문(question)이 <b>미리 정해져</b> 있나?
+├─ <span class="g">YES</span> → RAG · 문서 QA 인가?
+│         ├─ <span class="g">YES</span> → <span class="y">LongLLMLingua</span>   <span class="c"># 질문 인식 + 재정렬</span>
+│         └─ NO  → <span class="y">LLMLingua</span>       <span class="c"># CoT · ICL</span>
+└─ <span class="r">NO</span>  → 속도·비용이 중요한가?
+          ├─ <span class="g">YES</span> → <span class="y">LLMLingua-2</span>     <span class="c"># 3~6배 빠름, 캐싱 가능</span>
+          └─ NO  → <span class="y">LLMLingua</span></pre>
+
+  <div class="grid g3">
+    <div class="card" style="border-color:rgba(88,166,255,.4)">
+      <b><span class="chip c-v1">LLMLingua</span></b>
+      <p><b>이럴 때:</b></p>
+      <ul>
+        <li>Chain-of-Thought 프롬프트</li>
+        <li>In-Context Learning 예시 다수</li>
+        <li>질문이 고정돼 있지 않음</li>
+        <li>극한 압축률(20x)이 필요</li>
+      </ul>
+    </div>
+    <div class="card" style="border-color:rgba(255,166,87,.4)">
+      <b><span class="chip c-long">LongLLMLingua</span></b>
+      <p><b>이럴 때:</b></p>
+      <ul>
+        <li><b>RAG 파이프라인</b></li>
+        <li>검색된 문서 여러 개를 넣음</li>
+        <li>Lost in the Middle이 의심됨</li>
+        <li>질문이 항상 함께 옴</li>
+      </ul>
+    </div>
+    <div class="card" style="border-color:rgba(126,231,135,.35)">
+      <b><span class="chip c-v2">LLMLingua-2</span></b>
+      <p><b>이럴 때:</b></p>
+      <ul>
+        <li><b>실시간 서비스</b> (지연 민감)</li>
+        <li>GPU 리소스가 빠듯함</li>
+        <li>다국어 / 처음 보는 도메인</li>
+        <li>압축 결과를 <b>캐싱</b>하고 싶음</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>실무 추천 순서.</b> 대부분의 경우 <b>LLMLingua-2로 시작</b>하는 게 좋습니다.
+    가장 빠르고, 설정이 단순하고, GPU 부담이 적기 때문입니다.
+    RAG에서 정확도가 아쉬우면 그때 LongLLMLingua를 시도하세요.
+  </div>
+</div></section>
+
+</div><!-- /pane-compare -->
+
+
+<!-- ============================================================ -->
+<!-- ===================== PANE 3 : TUTORIAL ==================== -->
+<!-- ============================================================ -->
+<div class="pane" id="pane-tutorial">
+
+<section><div class="wrap">
+  <h2 style="margin-bottom:14px">🛠 실전 개발 순서</h2>
+  <p class="lead">
+    설치부터 RAG 파이프라인 통합, 품질 검증까지 <b>순서대로</b> 진행합니다.
+    각 단계는 앞 단계가 동작해야 의미가 있으니 건너뛰지 마세요.
+  </p>
+
+  <div class="grid g3">
+    <div class="card kpi"><div class="v" style="color:var(--a2)">8</div><div class="l">단계</div></div>
+    <div class="card kpi"><div class="v" style="color:var(--a1)">~30분</div><div class="l">예상 소요 (모델 다운로드 포함)</div></div>
+    <div class="card kpi"><div class="v" style="color:var(--a3)">GPU</div><div class="l">권장 (CPU도 가능)</div></div>
+  </div>
+
+  <!-- 1 -->
+  <h3 class="tut"><span class="stepnum">1</span>설치</h3>
+<pre>python3 -m venv .venv && source .venv/bin/activate
+pip install llmlingua
+
+<span class="c"># 양자화 모델(GPTQ)을 쓸 계획이면 추가</span>
+pip install optimum auto-gptq</pre>
+
+  <div class="note info">
+    <b>모델은 첫 실행 시 자동 다운로드됩니다.</b> 기본 모델은
+    <code>NousResearch/Llama-2-7b-hf</code>로 <b>수 GB</b>입니다.
+    가볍게 시작하려면 <b>3단계의 LLMLingua-2</b>부터 쓰세요 (수백 MB).
+  </div>
+
+  <!-- 2 -->
+  <h3 class="tut"><span class="stepnum">2</span>가장 단순한 압축 (LLMLingua)</h3>
+
+  <div class="filepath">step1_basic.py</div>
+<pre><span class="p">from</span> llmlingua <span class="p">import</span> PromptCompressor
+
+llm_lingua = PromptCompressor()          <span class="c"># 기본: Llama-2-7b</span>
+
+prompt = <span class="g">"""(여기에 긴 프롬프트... CoT 예시나 문서)"""</span>
+
+result = llm_lingua.compress_prompt(
+    prompt,
+    instruction=<span class="g">""</span>,
+    question=<span class="g">""</span>,
+    <span class="b">target_token</span>=<span class="y">200</span>,             <span class="c"># 목표 토큰 수</span>
+)
+
+<span class="b">print</span>(result[<span class="g">"compressed_prompt"</span>])
+<span class="b">print</span>(result[<span class="g">"origin_tokens"</span>], <span class="g">"→"</span>, result[<span class="g">"compressed_tokens"</span>])
+<span class="b">print</span>(result[<span class="g">"ratio"</span>], result[<span class="g">"saving"</span>])</pre>
+
+  <h4>반환값 구조</h4>
+  <table>
+    <thead><tr><th style="width:230px">키</th><th>내용</th></tr></thead>
+    <tbody>
+      <tr><td><code>compressed_prompt</code></td><td>압축된 프롬프트 문자열 <b>(이걸 LLM에 보냄)</b></td></tr>
+      <tr><td><code>compressed_prompt_list</code></td><td>리스트 형태 (LLMLingua-2 전용)</td></tr>
+      <tr><td><code>origin_tokens</code></td><td>원본 토큰 수</td></tr>
+      <tr><td><code>compressed_tokens</code></td><td>압축 후 토큰 수</td></tr>
+      <tr><td><code>ratio</code></td><td>압축 배율 (예: <code>"11.2x"</code>)</td></tr>
+      <tr><td><code>rate</code></td><td>압축 비율 (사람이 읽기 쉬운 형태)</td></tr>
+      <tr><td><code>saving</code></td><td>GPT-4 기준 예상 절감액</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note bad">
+    <b>⚠️ <code>rate</code>와 <code>target_token</code>은 함께 쓰지 마세요.</b>
+    <code>target_token</code>을 지정하면 <b><code>rate</code>는 무시됩니다.</b><br>
+    • <code>rate=0.33</code> → "원본의 33%만 남겨라" (0~1 사이 값)<br>
+    • <code>target_token=200</code> → "200 토큰이 되게 하라"
+  </div>
+
+  <!-- 3 -->
+  <h3 class="tut"><span class="stepnum">3</span>LLMLingua-2로 전환 (권장 시작점)</h3>
+  <p>더 빠르고 가볍습니다. <b><code>use_llmlingua2=True</code>가 필수</b>입니다.</p>
+
+  <div class="filepath">step2_llmlingua2.py</div>
+<pre><span class="p">from</span> llmlingua <span class="p">import</span> PromptCompressor
+
+llm_lingua = PromptCompressor(
+    model_name=<span class="g">"microsoft/llmlingua-2-xlm-roberta-large-meetingbank"</span>,
+    <span class="b">use_llmlingua2</span>=<span class="y">True</span>,        <span class="c"># ★ 빠뜨리면 동작 안 함</span>
+)
+
+result = llm_lingua.compress_prompt(
+    prompt,
+    <span class="b">rate</span>=<span class="y">0.33</span>,                       <span class="c"># 33%만 유지</span>
+    <span class="b">force_tokens</span>=[<span class="g">'\n'</span>, <span class="g">'?'</span>],         <span class="c"># 항상 보존할 토큰</span>
+)
+
+<span class="c"># 더 가벼운 모델</span>
+llm_lingua = PromptCompressor(
+    model_name=<span class="g">"microsoft/llmlingua-2-bert-base-multilingual-cased-meetingbank"</span>,
+    use_llmlingua2=<span class="y">True</span>,
+)</pre>
+
+  <div class="note ok">
+    <b><code>force_tokens</code>가 품질을 크게 좌우합니다.</b>
+    줄바꿈(<code>\n</code>)이 사라지면 구조가 무너지고, 물음표가 사라지면 질문이 평서문이 됩니다.
+    <b>코드나 표를 압축할 때는 특히 중요</b>합니다.
+  </div>
+
+  <!-- 4 -->
+  <h3 class="tut"><span class="stepnum">4</span>RAG에 LongLLMLingua 적용</h3>
+  <p>검색된 문서 여러 개 + 질문이 있는 <b>전형적인 RAG 상황</b>입니다.</p>
+
+  <div class="filepath">step3_rag.py</div>
+<pre><span class="p">from</span> llmlingua <span class="p">import</span> PromptCompressor
+
+llm_lingua = PromptCompressor()          <span class="c"># Llama-2-7b</span>
+
+<span class="c"># 벡터 검색 결과 (문서 리스트)</span>
+retrieved_docs = [doc1, doc2, doc3, ...]
+question = <span class="g">"우리 회사의 연차 이월 규정은?"</span>
+
+result = llm_lingua.compress_prompt(
+    <span class="b">retrieved_docs</span>,                <span class="c"># ★ 리스트로 전달</span>
+    <span class="b">question</span>=question,             <span class="c"># ★ 필수</span>
+    rate=<span class="y">0.55</span>,
+
+    <span class="c"># ── LongLLMLingua 전용 설정 ──</span>
+    <span class="b">condition_in_question</span>=<span class="g">"after_condition"</span>,   <span class="c"># 질문 인식 압축</span>
+    <span class="b">reorder_context</span>=<span class="g">"sort"</span>,                     <span class="c"># 중요 문서를 앞으로</span>
+    <span class="b">dynamic_context_compression_ratio</span>=<span class="y">0.3</span>,       <span class="c"># 동적 압축률 (0.3~0.4)</span>
+    <span class="b">condition_compare</span>=<span class="y">True</span>,                     <span class="c"># 대비 기반 정밀 압축</span>
+    <span class="b">context_budget</span>=<span class="g">"+100"</span>,                     <span class="c"># 문서 단위 예산 여유</span>
+    <span class="b">rank_method</span>=<span class="g">"longllmlingua"</span>,               <span class="c"># 문서 랭킹 방식</span>
+)
+
+<span class="c"># LLM 호출</span>
+final_prompt = result[<span class="g">"compressed_prompt"</span>]</pre>
+
+  <h4>파라미터 의미</h4>
+  <table>
+    <thead><tr><th style="width:250px">파라미터</th><th>역할</th></tr></thead>
+    <tbody>
+      <tr><td><code>condition_in_question</code></td><td><code>"none"</code>/<code>"before"</code>/<code>"after"</code>/<code>"after_condition"</code>.<br>질문을 어디에 두고 조건부 확률을 계산할지</td></tr>
+      <tr><td><code>reorder_context</code></td><td><code>"original"</code>(유지) / <code>"sort"</code>(중요도순). <b>Lost in the Middle 대응</b></td></tr>
+      <tr><td><code>dynamic_context_compression_ratio</code></td><td>문서별 압축 강도 차등. <b>0.3~0.4 권장</b></td></tr>
+      <tr><td><code>condition_compare</code></td><td>질문 유무 대비로 토큰 중요도 재계산. <b>정확도↑ 속도↓</b></td></tr>
+      <tr><td><code>context_budget</code></td><td>문서 단위 예산. <code>"+100"</code>은 여유 100토큰</td></tr>
+      <tr><td><code>rank_method</code></td><td><code>longllmlingua</code>, <code>bm25</code>, <code>bge_reranker</code>, <code>cohere</code> 등</td></tr>
+    </tbody>
+  </table>
+
+  <!-- 5 -->
+  <h3 class="tut"><span class="stepnum">5</span>구조 보존 압축 (Structured)</h3>
+  <p>
+    회의록의 화자 이름, 표 헤더처럼 <b>절대 지우면 안 되는 부분</b>이 있을 때 사용합니다.
+    <code>&lt;llmlingua&gt;</code> 태그로 구간을 나누고 구간별 압축률을 지정합니다.
+  </p>
+
+<pre>structured = <span class="g">"""</span>
+<span class="y">&lt;llmlingua, compress=False&gt;</span>Speaker 4:<span class="y">&lt;/llmlingua&gt;</span>
+<span class="y">&lt;llmlingua, rate=0.4&gt;</span> Thank you. And can we do the functions for content?<span class="y">&lt;/llmlingua&gt;</span>
+<span class="y">&lt;llmlingua, compress=False&gt;</span>Speaker 0:<span class="y">&lt;/llmlingua&gt;</span>
+<span class="y">&lt;llmlingua, rate=0.4&gt;</span> Item 11 is a communication from Council...<span class="y">&lt;/llmlingua&gt;</span>
+<span class="g">"""</span>
+
+result = llm_lingua.<span class="b">structured_compress_prompt</span>(
+    structured, instruction=<span class="g">""</span>, question=<span class="g">""</span>, rate=<span class="y">0.5</span>)</pre>
+
+  <div class="note ok">
+    <b>실무에서 매우 유용합니다.</b> JSON 데이터, 코드, 로그를 압축할 때
+    <b>키 이름·함수 시그니처는 <code>compress=False</code>로 보존</b>하고
+    값이나 본문만 압축하는 식으로 쓸 수 있습니다.
+  </div>
+
+  <!-- 6 -->
+  <h3 class="tut"><span class="stepnum">6</span>프레임워크 통합</h3>
+  <div class="split">
+    <div class="card">
+      <b>LangChain</b>
+      <p style="font-size:.87rem">
+        Retriever 뒤에 압축기를 붙이는 형태로 공식 통합돼 있습니다.
+        문서 검색 → 압축 → LLM 순서.
+      </p>
+    </div>
+    <div class="card">
+      <b>LlamaIndex</b>
+      <p style="font-size:.87rem">
+        <code>LongLLMLinguaPostprocessor</code>를 <b>node postprocessor</b>로 등록하면
+        검색된 노드가 자동 압축됩니다.
+      </p>
+    </div>
+  </div>
+  <p style="font-size:.9rem">
+    Microsoft <b>Prompt flow</b>에도 통합돼 있어 GUI로 파이프라인에 끼워 넣을 수 있습니다.
+  </p>
+
+  <!-- 7 -->
+  <h3 class="tut"><span class="stepnum">7</span>⭐ 품질 검증 — 가장 중요한 단계</h3>
+  <p>
+    압축은 <b>손실(lossy)</b>입니다. "얼마나 줄었나"만 보면 안 되고
+    <b style="color:var(--tx)">"정확도가 얼마나 떨어졌나"를 반드시 측정</b>해야 합니다.
+  </p>
+
+  <div class="filepath">step4_eval.py</div>
+<pre><span class="c"># 압축률을 바꿔가며 정확도 곡선을 그린다</span>
+<span class="p">for</span> rate <span class="p">in</span> [<span class="y">1.0</span>, <span class="y">0.8</span>, <span class="y">0.6</span>, <span class="y">0.5</span>, <span class="y">0.4</span>, <span class="y">0.3</span>]:
+    correct = <span class="y">0</span>
+    total_tokens = <span class="y">0</span>
+
+    <span class="p">for</span> sample <span class="p">in</span> eval_set:
+        <span class="p">if</span> rate == <span class="y">1.0</span>:
+            p = sample.prompt                    <span class="c"># 기준선 (무압축)</span>
+        <span class="p">else</span>:
+            r = llm_lingua.compress_prompt(sample.prompt, rate=rate)
+            p = r[<span class="g">"compressed_prompt"</span>]
+            total_tokens += r[<span class="g">"compressed_tokens"</span>]
+
+        answer = call_llm(p)
+        correct += (answer == sample.gold)
+
+    <span class="b">print</span>(<span class="g">f"rate={rate}  정확도={correct/len(eval_set):.1%}  토큰={total_tokens}"</span>)</pre>
+
+  <h4>결과는 이런 형태가 됩니다</h4>
+  <div class="bar-row"><span>무압축 (1.0)</span><div class="bar"><i style="width:100%;background:var(--tx3)"></i></div><span>92.0%</span></div>
+  <div class="bar-row"><span>rate 0.8</span><div class="bar"><i style="width:99%;background:var(--a2)"></i></div><span>91.2%</span></div>
+  <div class="bar-row"><span>rate 0.6</span><div class="bar"><i style="width:96%;background:var(--a2)"></i></div><span>88.5%</span></div>
+  <div class="bar-row"><span>rate 0.5</span><div class="bar"><i style="width:91%;background:var(--a3)"></i></div><span>83.7%</span></div>
+  <div class="bar-row"><span>rate 0.3</span><div class="bar"><i style="width:71%;background:var(--a5)"></i></div><span>65.3%</span></div>
+  <p style="font-size:.86rem;color:var(--tx3)">※ 수치는 형식 예시입니다. 실제 값은 도메인마다 크게 다릅니다.</p>
+
+  <div class="note info">
+    <b>찾아야 할 것은 "무릎(knee)"입니다.</b>
+    위 예시에서는 <code>0.6</code>까지는 완만하다가 <code>0.5</code> 아래로 급락합니다.
+    <b>이 급락 직전 지점이 운영 기준선</b>입니다.
+  </div>
+
+  <!-- 8 -->
+  <h3 class="tut"><span class="stepnum">8</span>운영 배치</h3>
+<pre><span class="c"># ① 압축 결과 캐싱 (LLMLingua-2는 task-agnostic이라 재사용 가능)</span>
+cache_key = hashlib.sha256(doc.encode()).hexdigest()
+<span class="p">if</span> cache_key <span class="p">in</span> cache:
+    compressed = cache[cache_key]
+<span class="p">else</span>:
+    compressed = llm_lingua.compress_prompt(doc, rate=<span class="y">0.5</span>)[<span class="g">"compressed_prompt"</span>]
+    cache[cache_key] = compressed
+
+<span class="c"># ② 압축 임계값 — 짧은 프롬프트는 압축 안 하는 게 이득</span>
+<span class="p">if</span> token_count(prompt) &lt; <span class="y">500</span>:
+    <span class="p">return</span> prompt          <span class="c"># 압축 오버헤드가 절감액보다 큼</span>
+
+<span class="c"># ③ 폴백 — 압축 실패 시 원본 사용</span>
+<span class="p">try</span>:
+    compressed = compress(prompt)
+<span class="p">except</span> Exception:
+    compressed = prompt</pre>
+
+  <!-- 체크리스트 -->
+  <h3 class="tut"><span class="stepnum">✓</span>체크리스트</h3>
+  <ul class="chk">
+    <li><b><code>use_llmlingua2=True</code></b> — LLMLingua-2 쓸 때 필수. 빠뜨리면 조용히 다른 방식으로 동작</li>
+    <li><b><code>rate</code> vs <code>target_token</code></b> — 둘 다 주면 <code>target_token</code>이 우선</li>
+    <li><b><code>force_tokens</code> 설정</b> — <code>\n</code>, <code>?</code> 등 구조 토큰 보존</li>
+    <li><b>LongLLMLingua는 <code>question</code> 필수</b> — 없으면 assert 실패</li>
+    <li><b>context는 리스트로</b> — RAG에서 문서별 처리하려면 <code>List[str]</code></li>
+    <li><b>정확도 측정 필수</b> — 압축률만 보고 배포하면 사고</li>
+    <li><b>짧은 프롬프트는 제외</b> — 압축 오버헤드가 이득보다 큼</li>
+    <li><b>GPU 메모리 확인</b> — 7B 모델은 수 GB. 양자화(GPTQ) 시 8GB 미만 가능</li>
+  </ul>
+</div></section>
+
+</div><!-- /pane-tutorial -->
+
+
+<!-- ============================================================ -->
+<!-- ===================== PANE 4 : ADVANCED ==================== -->
+<!-- ============================================================ -->
+<div class="pane" id="pane-advanced">
+
+<section><div class="wrap">
+  <h2><span class="num">1</span> 압축 모델 선택 — GPU 예산에 맞추기</h2>
+
+  <table>
+    <thead><tr><th style="width:270px">모델</th><th style="width:120px">메모리</th><th>특징</th></tr></thead>
+    <tbody>
+      <tr><td><code>NousResearch/Llama-2-7b-hf</code></td><td>~14GB</td><td><b>기본값.</b> 품질 최고, 가장 무거움</td></tr>
+      <tr><td><code>microsoft/phi-2</code></td><td>~6GB</td><td>2.7B. <b>품질/속도 균형</b>이 좋아 실용적</td></tr>
+      <tr><td><code>TheBloke/Llama-2-7b-Chat-GPTQ</code></td><td><b>&lt;8GB</b></td><td>4bit 양자화. <code>optimum</code>+<code>auto-gptq</code> 필요</td></tr>
+      <tr><td><code>gpt2</code> 계열</td><td>~1GB</td><td>가장 가벼움. 품질은 낮음</td></tr>
+      <tr><td><code>llmlingua-2-*</code></td><td><b>~1GB</b></td><td>BERT급. <b>가장 가볍고 빠름</b></td></tr>
+    </tbody>
+  </table>
+
+<pre><span class="c"># phi-2 (권장 절충안)</span>
+llm_lingua = PromptCompressor(<span class="g">"microsoft/phi-2"</span>)
+
+<span class="c"># 양자화 — 8GB 미만 GPU에서 7B 사용</span>
+llm_lingua = PromptCompressor(
+    <span class="g">"TheBloke/Llama-2-7b-Chat-GPTQ"</span>,
+    model_config={<span class="g">"revision"</span>: <span class="g">"main"</span>},
+)
+
+<span class="c"># CPU 전용 (느리지만 동작)</span>
+llm_lingua = PromptCompressor(device_map=<span class="g">"cpu"</span>)
+
+<span class="c"># Apple Silicon</span>
+llm_lingua = PromptCompressor(device_map=<span class="g">"mps"</span>)</pre>
+</div></section>
+
+<section><div class="wrap">
+  <h2><span class="num">2</span> 압축 단계 3종 — 켜고 끄기</h2>
+  <p class="lead">LLMLingua는 3개의 필터를 겹쳐 씁니다. 상황에 맞게 조합하세요.</p>
+
+  <table>
+    <thead><tr><th style="width:250px">파라미터</th><th style="width:90px">기본</th><th>동작</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>use_context_level_filter</code></td><td><b>True</b></td>
+        <td><b>문서 단위</b> 통째 제거. 관련 없는 문서를 버림</td>
+      </tr>
+      <tr>
+        <td><code>use_sentence_level_filter</code></td><td>False</td>
+        <td><b>문장 단위</b> 제거. 문법을 덜 깨뜨려 가독성이 좋음</td>
+      </tr>
+      <tr>
+        <td><code>use_token_level_filter</code></td><td><b>True</b></td>
+        <td><b>토큰 단위</b> 제거. 압축률 최고, 문장이 깨짐</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>문장이 깨지는 게 불편하다면</b> 토큰 필터를 끄고 문장 필터를 켜보세요.
+    압축률은 낮아지지만 <b>사람이 읽을 수 있는 결과</b>가 나옵니다.
+<pre style="margin:10px 0 0">use_token_level_filter=<span class="r">False</span>,
+use_sentence_level_filter=<span class="g">True</span>,</pre>
+  </div>
+
+  <h3>보존(preserve) 관련 파라미터</h3>
+  <table>
+    <thead><tr><th style="width:230px">파라미터</th><th>용도</th></tr></thead>
+    <tbody>
+      <tr><td><code>force_tokens</code></td><td>항상 남길 토큰. <code>['\n','?','.']</code> 등 구조 토큰</td></tr>
+      <tr><td><code>force_reserve_digit</code></td><td><b>숫자를 강제 보존.</b> 금액·날짜·수치가 중요한 문서에 필수</td></tr>
+      <tr><td><code>force_context_ids</code></td><td>특정 인덱스의 문서를 무조건 유지</td></tr>
+      <tr><td><code>keep_first_sentence</code> / <code>keep_last_sentence</code></td><td>각 문서의 앞/뒤 N문장 보존 (주제문·결론 보호)</td></tr>
+      <tr><td><code>keep_split</code></td><td>원본 구분자(줄바꿈 등) 유지</td></tr>
+      <tr><td><code>drop_consecutive</code></td><td><code>force_tokens</code>가 연속 등장할 때 중복 제거</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note bad">
+    <b>숫자 손실은 치명적입니다.</b> 재무 문서·계약서·로그를 압축한다면
+    <code>force_reserve_digit=True</code>를 꼭 켜세요.
+    <code>$10</code>이 <code>$1</code>이 되는 사고를 막습니다.
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <h2><span class="num">3</span> 자체 데이터로 LLMLingua-2 학습</h2>
+  <p class="lead">
+    기본 제공 모델은 <b>MeetingBank</b>(회의록)로 학습됐습니다.
+    도메인이 많이 다르면(코드·의료·법률) <b>직접 학습</b>하는 게 효과적입니다.
+  </p>
+
+  <div class="pipe">
+    <div class="prow">
+      <div class="pcol"><div class="pdot" style="background:var(--a4)">1</div><div class="pline"></div></div>
+      <div class="pbody">
+        <h4>데이터 수집 <span class="chip">GPT-4 증류</span></h4>
+        <p>내 도메인 문서를 GPT-4에 넣어 <b>"의미 보존 압축"</b> 결과를 대량 생성합니다.</p>
+        <p style="margin-top:6px"><code>experiments/llmlingua2/data_collection</code></p>
+      </div>
+    </div>
+    <div class="prow">
+      <div class="pcol"><div class="pdot" style="background:var(--a4)">2</div><div class="pline"></div></div>
+      <div class="pbody">
+        <h4>라벨 정렬</h4>
+        <p>원문 단어와 압축문을 정렬해 <b>keep/drop 라벨</b>을 만듭니다.</p>
+      </div>
+    </div>
+    <div class="prow">
+      <div class="pcol"><div class="pdot" style="background:var(--a4)">3</div></div>
+      <div class="pbody">
+        <h4>인코더 파인튜닝</h4>
+        <p>XLM-RoBERTa를 토큰 분류기로 학습합니다.</p>
+        <p style="margin-top:6px"><code>experiments/llmlingua2/model_training</code></p>
+      </div>
+    </div>
+  </div>
+
+  <div class="note ok">
+    <b>라벨 확인용 옵션.</b> <code>return_word_label=True</code>로 호출하면
+    각 단어에 붙은 keep/drop 라벨을 볼 수 있습니다.
+    <b>"왜 이 단어가 지워졌지?"</b>를 디버깅할 때 유용합니다.
+<pre style="margin:10px 0 0">r = llm_lingua.compress_prompt(text, rate=<span class="y">0.5</span>, <span class="b">return_word_label</span>=<span class="y">True</span>)
+<span class="b">print</span>(r[<span class="g">"fn_labeled_original_prompt"</span>])
+<span class="c"># Sam 1		|		bought 1		|		a 0		|		dozen 1 ...</span></pre>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <h2><span class="num">4</span> 한계와 주의사항</h2>
+
+  <div class="grid g2">
+    <div class="card" style="border-color:rgba(255,123,114,.38)">
+      <b>⚠️ 손실 압축이다</b>
+      <p>정보가 <b>실제로 사라집니다.</b> 되돌릴 수 없습니다
+      (LongLLMLingua의 <code>recover()</code>는 응답 후처리일 뿐, 완전 복원이 아님).</p>
+    </div>
+    <div class="card" style="border-color:rgba(255,123,114,.38)">
+      <b>⚠️ 사람이 못 읽는다</b>
+      <p>토큰 단위 삭제라 단어가 깨집니다. <b>로그·감사 용도로는 원본을 따로 보관</b>해야 합니다.</p>
+    </div>
+    <div class="card" style="border-color:rgba(255,166,87,.4)">
+      <b>⚠️ 오버헤드가 있다</b>
+      <p>압축에도 <b>모델 추론이 필요</b>합니다. 짧은 프롬프트는 압축이 손해입니다.</p>
+    </div>
+    <div class="card" style="border-color:rgba(255,166,87,.4)">
+      <b>⚠️ 도메인 의존</b>
+      <p>제공 모델은 <b>회의록 학습</b>입니다. 코드나 전문 문서는 성능이 떨어질 수 있습니다.</p>
+    </div>
+    <div class="card" style="border-color:rgba(88,166,255,.4)">
+      <b>💡 프롬프트 캐싱과의 관계</b>
+      <p>압축하면 <b>프리픽스가 매번 달라져</b> provider의 프롬프트 캐시 적중률이 떨어질 수 있습니다.
+      캐시 절감액과 압축 절감액을 <b>같이 계산</b>하세요.</p>
+    </div>
+    <div class="card" style="border-color:rgba(88,166,255,.4)">
+      <b>💡 코드 압축은 신중히</b>
+      <p>코드는 <b>한 토큰만 사라져도 문법이 깨집니다.</b>
+      구조 보존 압축이나 AST 기반 방식을 병행하세요.</p>
+    </div>
+  </div>
+
+  <h3>언제 쓰면 안 되나</h3>
+  <ul class="chk">
+    <li><b>법적 효력이 있는 문서</b> — 계약서 원문을 압축해 판단시키면 안 됨</li>
+    <li><b>정확한 인용이 필요한 작업</b> — 원문 그대로 인용해야 하는 경우</li>
+    <li><b>짧은 프롬프트</b> — 500토큰 미만은 오버헤드가 더 큼</li>
+    <li><b>코드 생성·수정</b> — 문법 깨짐 위험. 구조 보존 압축 필수</li>
+    <li><b>이미 캐시 적중률이 높은 워크로드</b> — 압축이 캐시를 깨뜨릴 수 있음</li>
+  </ul>
+</div></section>
+
+<section style="border-bottom:none"><div class="wrap">
+  <h2><span class="num">5</span> 한 장 요약</h2>
+
+<pre><span class="b">■ 공통 원리</span>
+  작은 모델로 토큰 중요도를 재고, 덜 중요한 토큰을 지운다.
+  LLM 재학습 불필요 — 순수 전처리.
+
+<span class="b">■ LLMLingua</span>          <span class="c">(EMNLP'23)</span>
+  Perplexity 기반 · 최대 20x 압축
+  Budget Controller → Iterative Token → Distribution Align
+  <span class="g">→ CoT · ICL · 범용</span>
+
+<span class="b">■ LongLLMLingua</span>      <span class="c">(ACL'24)</span>
+  질문 인식 + 문서 재정렬 + 동적 압축률 + 서브시퀀스 복원
+  RAG 성능 <span class="y">+21.4%</span> (1/4 토큰)
+  <span class="g">→ RAG · 긴 문서 QA</span>   <span class="r">※ question 필수</span>
+
+<span class="b">■ LLMLingua-2</span>        <span class="c">(ACL'24 Findings)</span>
+  GPT-4 증류 → BERT 토큰 분류기
+  <span class="y">3~6배 빠름</span> · task-agnostic · OOD 견고 · 경량
+  <span class="g">→ 실시간 서비스 · 다국어 · 캐싱</span>
+
+<span class="b">■ 실무 순서</span>
+  1) LLMLingua-2 로 시작 (가장 쉽고 빠름)
+  2) rate 를 1.0 → 0.3 으로 낮추며 <span class="y">정확도 곡선</span> 측정
+  3) 급락 직전 지점을 운영 기준선으로
+  4) RAG 정확도가 아쉬우면 LongLLMLingua 시도
+  5) 도메인이 특수하면 자체 데이터로 재학습</pre>
+
+  <div class="note ok" style="font-size:.95rem">
+    <b>가장 중요한 원칙 —</b> 압축률은 목표가 아닙니다.
+    <b>"정확도를 얼마나 유지하면서 비용을 줄였는가"</b>가 유일한 성공 지표입니다.
+    반드시 평가셋을 만들어 측정한 뒤 배포하세요.
+  </div>
+</div></section>
+
+</div><!-- /pane-advanced -->
+
+<footer><div class="wrap">
+  <div>
+    참고 —
+    <a href="https://github.com/microsoft/LLMLingua">microsoft/LLMLingua</a> ·
+    <a href="https://llmlingua.com/">프로젝트 페이지</a> ·
+    <a href="https://aclanthology.org/2023.emnlp-main.825/">LLMLingua 논문</a> ·
+    <a href="https://aclanthology.org/2024.acl-long.91/">LongLLMLingua 논문</a> ·
+    <a href="https://aclanthology.org/2024.findings-acl.57/">LLMLingua-2 논문</a> ·
+    <a href="https://huggingface.co/spaces/microsoft/LLMLingua-2">데모</a>
+  </div>
+  <div style="margin-top:8px;color:var(--tx3)">
+    본 문서의 API 시그니처·파라미터·기본값은 <code>llmlingua/prompt_compressor.py</code>와
+    공식 <code>README.md</code> · <code>DOCUMENT.md</code>에서 확인한 내용입니다.
+    성능 수치는 각 논문 및 공식 저장소 기재값이며, 정확도 곡선 등 일부 표는 <b>형식 예시</b>입니다.
+  </div>
+</div></footer>
+
+<script>
+  const btn = document.getElementById('toggle');
+  const KEY = 'llmlingua-theme';
+  if (localStorage.getItem(KEY) === 'light') {
+    document.body.classList.add('light');
+    btn.textContent = '◐ 다크';
+  }
+  btn.addEventListener('click', () => {
+    document.body.classList.toggle('light');
+    const light = document.body.classList.contains('light');
+    btn.textContent = light ? '◐ 다크' : '◐ 라이트';
+    localStorage.setItem(KEY, light ? 'light' : 'dark');
+  });
+
+  const tabs  = document.querySelectorAll('.tab');
+  const panes = document.querySelectorAll('.pane');
+  function show(id, push) {
+    tabs.forEach(t => t.classList.toggle('on', t.dataset.pane === id));
+    panes.forEach(p => p.classList.toggle('on', p.id === 'pane-' + id));
+    if (push) history.replaceState(null, '', '#' + id);
+    window.scrollTo({ top: 0 });
+  }
+  tabs.forEach(t => t.addEventListener('click', () => show(t.dataset.pane, true)));
+  const hash = location.hash.slice(1);
+  if (['intro','compare','tutorial','advanced'].includes(hash)) show(hash, false);
+</script>
+</body>
+</html>

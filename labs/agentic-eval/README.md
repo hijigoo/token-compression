@@ -30,7 +30,13 @@ compressors/      라이브러리 하나가 파일 하나입니다
 run.ipynb         파이프라인을 한 단계씩 보는 노트북 (build_notebooks.py 가 생성)
 experiments/      질문 하나가 파일 하나이자 pier 실행 한 번입니다
 launch.py         arm 기동 + 포트 배정 + pier 설정 생성
+patch_pier.py     pier 패치 2종 (아래 '반드시 먼저' 참고)
+run_all.sh        무인 실행 — 프록시 기동 → 언어별 pier run → 정리
 analyze.py        reward 와 토큰 집계
+report_run.py     롤아웃 하나 → md + html
+report_paper.py   여러 롤아웃 → 기술 보고서 (전체판 + 요약판)
+refresh_report.sh 최신 측정으로 보고서 재생성 (경로를 알아서 찾습니다)
+make_samples.py   보고서 부록용 압축 입출력 예시 생성
 ```
 
 `datasets/` 와 `translations/` 가 나뉘어 있는 이유가 있습니다. `datasets/` 는
@@ -213,6 +219,57 @@ transformers 5.x   Cache 객체로 바뀜 → ValueError
 
 ## 실행 방법
 
+### 반드시 먼저 — pier 패치와 환경변수
+
+두 가지를 하지 않으면 **압축 arm 이 0 스텝에서 죽거나, 채점이 통째로
+0점으로 기록됩니다.** 둘 다 에러 메시지가 친절하지 않아 원인을 찾기
+어렵습니다.
+
+```bash
+./.venv/bin/python patch_pier.py          # ① pier 패치 2종
+export PIER_EXTRA_SAFE_PORTS="8801 8802 8803 8804 8805 8806"   # ② squid 허용 포트
+```
+
+| | 무엇을 | 안 하면 |
+|---|---|---|
+| ① `patch_pier.py` | mini-swe-agent 에 PyPI 미러 주입 · squid `Safe_ports` 확장 | 에이전트 설치 실패 또는 프록시 접속 차단 |
+| ② `PIER_EXTRA_SAFE_PORTS` | 압축 프록시 포트를 squid 가 허용 | 압축 arm 이 첫 호출부터 실패 |
+
+`PYPI_INDEX`(`launch.py` 상수)는 에이전트 컨테이너와 **채점 컨테이너 양쪽**에
+들어갑니다. 채점기만 빠뜨리면 에이전트가 과제를 완벽히 풀어도 0점이
+기록됩니다.
+
+### 무인 실행
+
+`launch.py` 는 프록시를 띄운 뒤 `signal.pause()` 로 멈춰 서서 사람이 pier
+명령을 붙여넣기를 기다립니다. 한 시간짜리 롤아웃을 자리 비우고 돌리려면
+`run_all.sh` 를 쓰십시오 — 프록시 기동부터 언어별 `pier run`, 정리까지
+이어서 합니다.
+
+```bash
+export OPENAI_API_KEY="$(az account get-access-token \
+  --scope https://cognitiveservices.azure.com/.default --query accessToken -o tsv)"
+export UPSTREAM_BASE_URL=https://<리소스>.cognitiveservices.azure.com/openai
+export PUBLIC_HOST=host.docker.internal
+export PIER_EXTRA_SAFE_PORTS="8801 8802 8803 8804 8805 8806"
+
+./run_all.sh experiments/terminal-bench-sweep.yaml /tmp/tbsweep
+```
+
+토큰은 약 77분이면 만료됩니다. 그보다 긴 롤아웃을 이어 돌리실 때는 롤아웃
+사이에 다시 받으십시오.
+
+### 보고서 생성
+
+```bash
+./refresh_report.sh          # 최신 run 을 찾아 reports/analysis/ 에 생성
+```
+
+전체판(`report.html`)과 요약판(`brief.html`)이 함께 나옵니다. 롤아웃이 아직
+진행 중이면 보고서 상단에 경고가 자동으로 붙고, 완료되면 사라집니다.
+
+### 수동 실행
+
 **처음이시면 `smoke` 부터 돌려주세요.** 태스크 1개·시도 1회짜리라 파이프라인이
 끝까지 이어지는지만 봅니다. 여기서 baseline 이 실패하면 압축 실험은 볼 것도
 없습니다.
@@ -361,6 +418,9 @@ dataset:
 | 모델 로딩 지연 | 프록시를 띄울 때 미리 데웁니다. 첫 요청에서 로딩하면 타임아웃이 성능으로 잡힙니다 |
 | system 프롬프트 | 압축하지 않습니다. 출력 형식 계약이 깨지면 파싱 실패로 0점이 됩니다 |
 | 절감률 | 자기보고 대신 `trajectory.json`의 실제 입력 토큰으로 교차 검증합니다 |
+| **압축 API 경로** | 에이전트가 `/chat/completions` 대신 `/responses` 를 부르면 압축이 걸리지 않습니다. `proxy.py` 가 두 API 를 모두 처리하며, 측정 후 `compress` 이벤트 수를 확인하십시오 |
+| **채점 컨테이너 네트워크** | 채점기가 `uvx` 로 pytest 를 설치합니다. PyPI 가 막히면 테스트가 한 줄도 안 돌고 0점이 기록됩니다. `launch.py` 가 `verifier.env` 에 미러를 주입합니다 |
+| **스텝 상한** | 압축 조건은 헤매면서 스텝이 늘어납니다. 상한이 없으면 한 trial 이 몇 시간을 잡아먹습니다. `launch.py` 가 전 조건 동일하게 60 을 겁니다 |
 
 `--no-ccr`이 왜 필수인지 조금 더 설명드리면 이렇습니다. CCR은 원문을 로컬에
 두고 모델이 `headroom_retrieve` 툴로 다시 꺼내오게 하는 방식입니다. 그런데

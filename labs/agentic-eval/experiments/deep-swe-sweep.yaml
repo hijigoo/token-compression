@@ -1,0 +1,61 @@
+# 목적: **압축률–정확도 곡선**을 DeepSWE 에서도 얻는다.
+#
+# Terminal Bench 와 DeepSWE 는 부하 성격이 완전히 다릅니다. smoke 측정에서
+# DeepSWE 한 trial 의 누적 입력이 **1,237,851 토큰**이었습니다 — Terminal
+# Bench 평균(약 27,000)의 45배입니다. 저장소를 훑고 여러 파일을 고치는
+# 과제라 컨텍스트가 훨씬 크게 자랍니다.
+#
+# 압축은 줄일 것이 있어야 의미가 있으므로, 이 규모에서 정확도를 지킬 수
+# 있는지가 실제 도입 판단에 더 가깝습니다. Terminal Bench 결과만으로
+# 결론을 내면 안 되는 이유입니다.
+#
+# 채점도 다릅니다. Terminal Bench 는 전체 통과 여부만 주는 반면 DeepSWE 는
+# f2p(고쳐야 할 테스트)와 p2p(깨뜨리면 안 되는 테스트)를 나눠 줍니다.
+# 압축이 "못 고침" 을 유발했는지 "멀쩡한 걸 깨뜨림" 을 유발했는지 갈립니다.
+#
+# 태스크는 언어를 겹치지 않게 셋만 씁니다. trial 하나가 5~10분이라
+# 5 조건이면 15 trial 이고, 4 병렬로 30~50분입니다.
+#
+#   PUBLIC_HOST=host.docker.internal \
+#   PIER_EXTRA_SAFE_PORTS="8801 8802 8803 8804 8805 8806" \
+#   ./run_all.sh experiments/deep-swe-sweep.yaml /tmp/dssweep
+
+name: deep-swe-sweep
+benchmark: deep-swe
+langs: [en]
+model: openai/gpt-5.4      # 최종 호출 모델. 압축기(xlm-roberta)와 별개입니다.
+agent: mini-swe-agent
+
+dataset:
+  tasks:
+    - mashumaro-flattened-dataclass-fields  # python · smoke 에서 검증됨
+    - happy-dom-abort-pending-body-reads    # typescript
+    - geo-shapeindex-serialization          # go
+
+n_attempts: 1
+n_concurrent_trials: 4
+
+arms:
+  - name: baseline
+    kind: direct
+
+  # rate 는 **남길 비율**입니다. 아래로 갈수록 압축이 강해집니다.
+  - name: llmlingua2-r0.9
+    kind: local
+    compressor: llmlingua
+    ratio: 0.9
+
+  - name: llmlingua2-r0.8
+    kind: local
+    compressor: llmlingua
+    ratio: 0.8
+
+  - name: llmlingua2-r0.7
+    kind: local
+    compressor: llmlingua
+    ratio: 0.7
+
+  - name: llmlingua2-r0.5
+    kind: local
+    compressor: llmlingua
+    ratio: 0.5

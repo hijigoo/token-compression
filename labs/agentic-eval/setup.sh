@@ -8,6 +8,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 DEEPSWE_REPO="https://github.com/datacurve-ai/deep-swe"
+TBENCH_REPO="https://github.com/harbor-framework/terminal-bench-2-1"
 # pier 주소는 requirements.txt 가 갖고 있습니다. 두 곳에 적으면 어긋납니다.
 
 log()  { printf '\033[36m▸ %s\033[0m\n' "$*"; }
@@ -45,6 +46,20 @@ fi
 n_tasks=$(find datasets/deep-swe/tasks -maxdepth 1 -mindepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
 [[ "$n_tasks" -gt 0 ]] || die "datasets/deep-swe/tasks 가 비어 있습니다"
 log "태스크 ${n_tasks}개"
+
+# Terminal Bench 2.1 — DeepSWE 와 성격이 다른 두 번째 벤치마크입니다.
+# DeepSWE 는 "저장소를 고쳐라"(코드 편집), Terminal Bench 는 "터미널에서
+# 끝내라"(파일 복구·마이그레이션·로그 집계)라 압축이 다르게 먹힐 수 있습니다.
+# MS 문서가 인용한 세 태스크가 여기 들어 있습니다.
+if [[ -d datasets/terminal-bench/.git ]]; then
+  log "terminal-bench — 이미 있음 (skip)"
+else
+  log "terminal-bench 2.1 클론 중…"
+  git clone --depth 1 "$TBENCH_REPO" datasets/terminal-bench
+fi
+
+tb_tasks=$(find datasets/terminal-bench/tasks -maxdepth 1 -mindepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
+log "terminal-bench 태스크 ${tb_tasks}개"
 
 # ── 3. 랩 전용 venv ──────────────────────────────────────────
 # 루트 .venv 와 분리한다. llmlingua/torch 핀이 다른 랩과 충돌하기 때문.

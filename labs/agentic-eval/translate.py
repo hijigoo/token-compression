@@ -43,6 +43,7 @@ TRANSLATIONS = HERE / "translations"
 # 여기 한 줄만 늘리면 된다.
 BENCHMARKS = {
     "deep-swe": "tasks",          # datasets/deep-swe/tasks/<태스크>/
+    "terminal-bench": "tasks",    # datasets/terminal-bench/tasks/<태스크>/
 }
 
 # 명령별로 아래 세 경로를 쓴다. main() 이 --benchmark 를 읽어 채운다.
@@ -90,6 +91,11 @@ STOPWORDS = {
     "IMPORTANT", "NOTE", "WARNING", "TODO", "AND", "OR", "NOT", "THE",
     "API", "URL", "HTTP", "HTTPS", "JSON", "YAML", "XML", "CSV", "SQL",
     "CPU", "RAM", "OS", "ID", "UTF", "ASCII", "UUID", "MUST", "SHOULD",
+    # 영어 지시문에서 강조로 대문자를 쓴 것들. Terminal Bench 지시문에
+    # "Extract ALL data" 처럼 나오는데, 번역하면 "모든" 이 되는 게 맞습니다.
+    # 빼 두지 않으면 정상 번역이 "식별자 유실" 로 잡힙니다.
+    "ALL", "ANY", "NONE", "ONLY", "EACH", "BOTH", "NEVER", "ALWAYS",
+    "YES", "NO", "DO", "DON'T", "CAN", "WILL", "EXACTLY", "MUST NOT",
 }
 
 
@@ -283,7 +289,7 @@ def cmd_stage(args) -> int:
     log(f"한국어 데이터셋 {len(targets)}건 → {STAGE_KO.relative_to(REPO)}")
     print("  실험 yaml 에서 이렇게 쓰세요:")
     print("    dataset:")
-    print("      path: ./deep-swe-ko/tasks")
+    print("      path: ./" + STAGE_KO.parent.name + "/tasks")
     return 0
 
 
