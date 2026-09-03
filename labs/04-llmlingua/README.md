@@ -40,7 +40,14 @@ uv pip install --python .venv/bin/python -r requirements.txt
 ```
 
 **처음 실행은 모델을 내려받습니다** — `v2`는 약 700MB, `v1`/`long`은 약 1GB
-입니다. `~/.cache/huggingface/`에 남아 다음부터는 로딩만 합니다.
+입니다. 받은 모델은 **저장소 밖**인 `~/.cache/huggingface/`에 남고, 다음부터는
+로딩만 합니다.
+
+> **저장소에는 모델이 들어가지 않습니다.** 기본 경로가 홈 디렉터리라 애초에
+> 섞이지 않고, 혹시 `HF_HOME`을 저장소 안으로 지정하시더라도 `.gitignore`가
+> 막습니다. HuggingFace 캐시의 가중치 파일은 `88c142...`처럼 **확장자가 없어서**
+> `*.safetensors` 같은 규칙으로는 못 잡히기 때문에, `models--*/` 디렉터리
+> 패턴으로 따로 막아 두었습니다.
 
 노트북도 있습니다.
 

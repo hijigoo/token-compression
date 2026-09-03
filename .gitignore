@@ -115,9 +115,29 @@ labs/agentic-eval/deep-swe/
 # ─────────────────────────────────────────────────────────────
 .cache/
 models/
+# 모델 가중치. 확장자로 거르는 것은 **보조 수단**입니다 —
+# HuggingFace 캐시의 실제 파일은 확장자가 없는 SHA 이름이라 아래
+# 디렉터리 규칙이 진짜 방어선입니다.
 *.safetensors
 *.bin
 *.gguf
+*.pt
+*.pth
+*.ckpt
+*.h5
+*.msgpack
+*.npz
+*.model
+
+# HuggingFace / 모델 캐시가 저장소 안에 생기는 경우.
+# HF_HOME 이나 TRANSFORMERS_CACHE 를 상대경로로 지정하면 이렇게 됩니다.
+# 캐시 안의 가중치 파일은 88c142... 같은 확장자 없는 이름이라
+# 위의 확장자 규칙으로는 절대 못 잡습니다. 1GB 가 그냥 커밋됩니다.
+**/models--*/
+**/hub/models--*/
+.hfcache/
+hf_cache/
+**/.cache/huggingface/
 *.onnx
 .hf_home/
 huggingface/
