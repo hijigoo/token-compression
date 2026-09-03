@@ -1536,8 +1536,12 @@ def nb_04() -> dict:
 중요도를 매기는 모델이 작아서, 그 모델이 약한 언어에서는 성능이 떨어집니다.
 그래서 이 랩만 **한·영 이중언어 코퍼스**를 씁니다.
 
-> **결론을 미리 말씀드리면** — 세 변형 중 `v2` 만 쓸 만했고,
-> 같은 설정에서 **한국어가 영어보다 먼저 무너집니다.**
+**이 노트북에서 확인할 것**
+
+1. 세 변형이 같은 문장을 어떻게 다르게 줄이는가
+2. 같은 설정에서 **한국어와 영어의 결과가 같은가**
+3. 압축률을 높이면 어디서부터 답을 못 하게 되는가
+4. 줄인 만큼 **비용과 시간이 실제로 줄어드는가**
 
 ## ⚠️ 처음 실행은 오래 걸립니다
 
@@ -1579,42 +1583,85 @@ def nb_04() -> dict:
         md("""
 ## 2. 코퍼스 — 같은 사실을 한국어와 영어로
 
-번역이 아니라 **같은 사실을 담은 쌍**입니다. `pair_id` 로 묶여 있어
-언어별 차이를 케이스 단위로 볼 수 있습니다.
+번역이 아니라 **같은 사실을 담은 쌍**입니다. 한국어를 기계번역하면 어색한
+문장이 나와서, 각 언어로 자연스럽게 따로 썼습니다. `pair_id` 로 묶여 있어
+`ko-01` 과 `en-01` 을 짝지어 볼 수 있습니다.
+
+유형은 앞선 랩들과 같습니다. 압축이 잘 깨지는 자리를 골라 둔 것입니다.
+
+| 유형 | 무엇을 겨냥하나 |
+|---|---|
+| `numeric` | 금액·비율이 답인 경우 |
+| `negation` | 부정어가 사라지면 뜻이 뒤집힙니다 |
+| `identifier` | 코드·사번처럼 문맥 없이 떠 있는 값 |
+| `structured` | 표에 가까운 나열 |
+| `longdoc` | 여러 문단. 프루닝이 이득을 내려면 길이가 필요합니다 |
+
+아래 셀은 언어별 분량과 **문자당 토큰 수**를 봅니다. 같은 내용을 담는 데
+각 언어가 토큰을 얼마나 쓰는지 먼저 확인해 두는 것입니다.
 """),
-        code('\ncases = dataset.load("../data/sample-bilingual")\ncounter = T.make_counter({"mode": "local"}, "gpt-5.4")\n\nko = [c for c in cases if c.meta["lang"] == "ko"]\nen = [c for c in cases if c.meta["lang"] == "en"]\n\ntable(\n    ["언어", "건수", "문자", "토큰", "문자당 토큰"],\n    [[lg, len(xs), f"{sum(len(c.text) for c in xs):,}",\n      f"{sum(counter(c.text) for c in xs):,}",\n      f"{sum(counter(c.text) for c in xs) / sum(len(c.text) for c in xs):.2f}"]\n     for lg, xs in [("한국어", ko), ("영어", en)]],\n    align=["left", "right", "right", "right", "right"],\n    title="이중언어 코퍼스",\n    note="같은 내용인데 한국어가 문자당 토큰을 더 씁니다. 압축이 더 절실한 "\n         "쪽인데, 아래에서 보시면 품질은 더 나쁩니다.",\n)\n\nc = ko[0]\nprint(f"[{c.id}] {c.question}")\nprint(f"  {c.text[:70]}…")\nprint(f"  정답 문자열 {c.must_include}")\n'),
+        code('\ncases = dataset.load("../data/sample-bilingual")\ncounter = T.make_counter({"mode": "local"}, "gpt-5.4")\n\nko = [c for c in cases if c.meta["lang"] == "ko"]\nen = [c for c in cases if c.meta["lang"] == "en"]\n\ntable(\n    ["언어", "건수", "문자", "토큰", "문자당 토큰"],\n    [[lg, len(xs), f"{sum(len(c.text) for c in xs):,}",\n      f"{sum(counter(c.text) for c in xs):,}",\n      f"{sum(counter(c.text) for c in xs) / sum(len(c.text) for c in xs):.2f}"]\n     for lg, xs in [("한국어", ko), ("영어", en)]],\n    align=["left", "right", "right", "right", "right"],\n    title="이중언어 코퍼스",\n    note="문자당 토큰이 언어마다 다릅니다. 뒤의 절감률을 읽으실 때 "\n         "이 값을 기억해 두세요 — 같은 절감률이라도 아끼는 토큰 수가 다릅니다.",\n)\n\nc = ko[0]\nprint(f"[{c.id}] {c.question}")\nprint(f"  {c.text[:70]}…")\nprint(f"  정답 문자열 {c.must_include}")\n'),
 
         md("""
 ## 3. 세 변형이 같은 문장을 어떻게 다루나 — 한국어와 영어로
 
+### 세 변형이 무엇인지 먼저
+
+이름은 비슷하지만 **무엇을 근거로 버릴지**가 다릅니다.
+
+| 변형 | 무엇을 보고 버릴 토큰을 정하나 | 질문을 쓰나 |
+|---|---|---|
+| **`v1`** LLMLingua | 인과 LM 이 매긴 **토큰별 정보량**. 예측하기 쉬운 토큰부터 버립니다 | ✗ |
+| **`long`** LongLLMLingua | 위와 같되, **질문과의 관련도**로 문단 순위를 먼저 매깁니다 | **✓** |
+| **`v2`** LLMLingua-2 | 전용 분류 모델이 토큰마다 **남길지 말지 직접 판정**합니다 | ✗ |
+
+`v1` 과 `long` 은 "이 토큰이 얼마나 놀라운가" 를 보고, `v2` 는 "이 토큰을
+남겨야 하나" 를 학습한 대로 답합니다. 앞의 둘은 인과 LM 이 필요하고
+`v2` 는 전용 인코더를 씁니다.
+
+### 무엇을 확인하나
+
 **같은 사실을 담은 한·영 쌍**(`ko-01` / `en-01`)에 셋을 각각 겁니다.
-언어만 다르고 내용·질문·정답 문자열은 같으므로, 차이가 나면 그건 순전히
-언어 때문입니다.
+언어만 다르고 내용·질문·정답 문자열이 같으므로, 결과가 갈리면 그건
+순전히 언어 때문입니다.
+
+표에서 이렇게 보세요.
+
+- **절감** — 얼마나 줄였나
+- **보존율** — 답에 필요한 문자열이 남았나
+- **남은 정답 문자열** — 무엇이 남고 무엇이 사라졌나
+
+절감이 크면서 보존율도 높은 조합이 있는지, 아니면 맞바꿔야 하는지 보시면
+됩니다.
 
 **처음 실행하면 모델 세 개를 받느라 몇 분 걸립니다.**
 """),
-        code('# ── 이 셀의 설정 ──────────────────────────────────────────────\nRATE = 0.5               # 남길 비율. 낮출수록 많이 버립니다\nRESERVE_DIGIT = True     # 숫자를 지키려 시도합니다\nPAIR = ["ko-01", "en-01"]\n\n# 같은 사실을 담은 한·영 쌍입니다. 언어만 다르고 내용·질문·정답이 같습니다.\nprint(f"설정 · 모델 {MODEL} · rate {RATE} · force_reserve_digit {RESERVE_DIGIT}")\nprint()\n\nfor cid in PAIR:\n    probe = [c for c in cases if c.id == cid][0]\n    print(f"[{cid}] {probe.question}")\n    print(f"  원문: {probe.text[:88]}…")\n    print(f"  정답 문자열: {probe.must_include}")\n    print()\n\nrows = []\nfor cid in PAIR:\n    probe = [c for c in cases if c.id == cid][0]\n    for v in ["v1", "long", "v2"]:\n        out, meta = compress(probe.text, question=probe.question, variant=v,\n                             model_name=model_for(v),\n                             rate=RATE, force_reserve_digit=RESERVE_DIGIT)\n        kept = [m for m in probe.must_include\n                if m.replace(",", "") in out.replace(" ", "").replace(",", "")]\n        rows.append([cid, v, f"{counter(probe.text)} → {counter(out)}",\n                     pct(1 - counter(out) / counter(probe.text)),\n                     pct(survival(out, probe.must_include)),\n                     ", ".join(kept) if kept else "(전부 사라짐)"])\n        print(f"  {cid} / {v} 완료", flush=True)\n\ntable(\n    ["케이스", "변형", "토큰", "절감", "보존율", "남은 정답 문자열"],\n    rows,\n    align=["left", "left", "right", "right", "right", "left"],\n    title=f"세 변형 비교 · 모델 {MODEL} · rate={RATE} "\n          f"· force_reserve_digit={RESERVE_DIGIT}",\n    note="같은 변형·같은 rate 인데 언어에 따라 남는 것이 다릅니다.",\n)\n'),
+        code('# ── 이 셀의 설정 ──────────────────────────────────────────────\nRATE = 0.5               # 남길 비율. 낮출수록 많이 버립니다\nRESERVE_DIGIT = True     # 숫자를 지키려 시도합니다\nPAIR = ["ko-01", "en-01"]\n\n# 같은 사실을 담은 한·영 쌍입니다. 언어만 다르고 내용·질문·정답이 같습니다.\nprint(f"설정 · 모델 {MODEL} · rate {RATE} · force_reserve_digit {RESERVE_DIGIT}")\nprint()\n\nfor cid in PAIR:\n    probe = [c for c in cases if c.id == cid][0]\n    print(f"[{cid}] {probe.question}")\n    print(f"  원문: {probe.text[:88]}…")\n    print(f"  정답 문자열: {probe.must_include}")\n    print()\n\nrows = []\nfor cid in PAIR:\n    probe = [c for c in cases if c.id == cid][0]\n    for v in ["v1", "long", "v2"]:\n        out, meta = compress(probe.text, question=probe.question, variant=v,\n                             model_name=model_for(v),\n                             rate=RATE, force_reserve_digit=RESERVE_DIGIT)\n        kept = [m for m in probe.must_include\n                if m.replace(",", "") in out.replace(" ", "").replace(",", "")]\n        rows.append([cid, v, f"{counter(probe.text)} → {counter(out)}",\n                     pct(1 - counter(out) / counter(probe.text)),\n                     pct(survival(out, probe.must_include)),\n                     ", ".join(kept) if kept else "(전부 사라짐)"])\n        print(f"  {cid} / {v} 완료", flush=True)\n\ntable(\n    ["케이스", "변형", "토큰", "절감", "보존율", "남은 정답 문자열"],\n    rows,\n    align=["left", "left", "right", "right", "right", "left"],\n    title=f"세 변형 비교 · 모델 {MODEL} · rate={RATE} "\n          f"· force_reserve_digit={RESERVE_DIGIT}",\n    note="세 줄씩 두 묶음입니다. 같은 행의 한국어·영어를 짝지어 보시고, "\n         "\'남은 정답 문자열\' 이 비어 있으면 그 질문에는 답할 수 없습니다.",\n)\n'),
 
         md("""
-표에서 세 가지가 보입니다.
+### 표를 읽으실 때
 
-**① `v1` 은 거의 압축하지 않습니다.** 한국어 0.0%, 영어 1.1% 입니다.
-질문 없이 토큰 정보량만 보는데, 0.5B 모델은 무엇을 버려도 되는지 판단할
-자신이 없어서 대부분 그대로 둡니다. 보존율 100% 는 잘해서가 아니라
-**아무것도 안 버려서** 나온 값입니다.
+**절감률과 보존율을 반드시 같이 보세요.** 한쪽만 보면 뒤집힌 결론이 나옵니다.
 
-**② `long` 은 많이 버리지만 정답까지 버립니다.** 영어는 56.4% 를 줄이면서
-정답 문자열을 **전부** 잃었습니다. 토큰 단위로 잘라서 `32,450,000` 이
-`32,450,00RW` 처럼 숫자 중간에서 끊깁니다.
+| 이런 조합이면 | 뜻 |
+|---|---|
+| 절감 ≈ 0% · 보존 100% | 압축을 거의 안 한 것입니다. 잘한 게 아닙니다 |
+| 절감 큼 · 보존 0% | 많이 줄였지만 답할 근거가 사라졌습니다 |
+| 절감 큼 · 보존 100% | 이 조건에서는 쓸 만합니다 |
 
-**③ `v2` 만 언어에 따라 갈립니다.** 영어는 37.2% 를 줄이고 보존율 100%,
-한국어는 36.2% 를 줄이고 보존율 50% 입니다. 같은 설정인데 한국어에서만
-`32,450,000` 이 사라졌습니다.
+그리고 세 가지를 확인해 보세요.
 
-> `v1`/`long` 의 문제는 **작은 모델을 써서** 생깁니다. "LongLLMLingua 가
-> 나쁘다" 가 아니라 "작은 순위 모델로는 못 쓴다" 로 읽어주세요.
-> 논문은 7B 를 썼고 여기서는 0.5B 를 씁니다.
+1. **같은 행의 한국어·영어가 같은 결과인가** — 갈린다면 내용이 아니라
+   언어 때문입니다. 내용·질문·정답이 같은 쌍이니까요.
+2. **'남은 정답 문자열' 에 무엇이 사라졌나** — 금액인지 식별자인지에 따라
+   위험도가 다릅니다.
+3. **압축 결과를 직접 읽어보면** 숫자가 온전한지 중간에서 끊겼는지
+   보입니다. 아래 셀로 원문과 나란히 볼 수 있습니다.
+
+> 결과는 **고른 모델과 `rate` 에 따라 달라집니다.** 위의 드롭다운을 바꿔
+> 다시 돌려보시면 같은 코드로 다른 그림이 나옵니다.
 """),
+        code('\n# 압축 결과를 눈으로 확인합니다. 표의 숫자만으로는 "어떻게" 깨졌는지\n# 알 수 없습니다.\nLOOK = "en-01"          # 보고 싶은 케이스로 바꾸셔도 됩니다\n\nprobe = [c for c in cases if c.id == LOOK][0]\nprint(f"[{LOOK}] 모델 {MODEL} · rate {RATE}")\nprint(f"질문: {probe.question}")\nprint(f"정답 문자열: {probe.must_include}")\nprint()\nprint("원문")\nprint(" ", probe.text[:150])\n\nfor v in ["v1", "long", "v2"]:\n    out, _ = compress(probe.text, question=probe.question, variant=v,\n                      model_name=model_for(v), rate=RATE,\n                      force_reserve_digit=RESERVE_DIGIT)\n    print()\n    print(v)\n    print(" ", out[:150].replace(chr(10), " "))\n'),
 
         md("""
 ## 4. 조용히 무시되는 인자 — 이 랩에서 가장 조심할 부분
@@ -1643,37 +1690,51 @@ def nb_04() -> dict:
         code('\nn_ko = len([c for c in cases if c.meta["lang"] == "ko"])\nn_en = len([c for c in cases if c.meta["lang"] == "en"])\n\n# 뒤의 세 열은 같은 보존율을 언어별로 나눈 것입니다. 열 이름에 건수를 적어\n# "전체가 두 언어의 단순평균인가?" 라는 오해를 줄입니다.\nrows = []\nfor n, m, _ in results:\n    ko, en = m.get("surv_ko"), m.get("surv_en")\n    gap = (en - ko) if (ko is not None and en is not None) else None\n    rows.append([n, m["variant"], m["model"].split("/")[-1][:26], m["rate"],\n                 pct(m["saved"]),\n                 pct(m["survival_mean"]), pct(ko), pct(en),\n                 "—" if gap is None else f"{gap * 100:+.1f}%p"])\n\ntable(\n    ["설정", "변형", "모델", "rate", "절감",\n     f"보존율 전체({len(cases)}건)", f"한국어({n_ko}건)", f"영어({n_en}건)",\n     "영−한 격차"],\n    rows,\n    align=["left", "left", "left", "right", "right",\n           "right", "right", "right", "right"],\n    title="조건 비교 — 설정마다 변형·모델·rate 가 다릅니다",\n    note=f"\'전체\' 는 {len(cases)}건 전부의 평균입니다. 지금은 한·영이 {n_ko}건씩 "\n         f"같아서 두 언어 평균의 가운데값과 일치하지만, 건수가 달라지면 "\n         f"많은 쪽으로 기웁니다.",\n)\n\nreal = [m for _, m, _ in results if m.get("rate") != 1.0]\nif real:\n    w = max(real, key=lambda m: (m.get("surv_en") or 0) - (m.get("surv_ko") or 0))\n    print(f"격차가 가장 큰 조건은 {w[\'config\']} 입니다.")\n    print(f"  전체 {w[\'survival_mean\']:.1%} 로는 무난해 보이지만 "\n          f"한국어만 보면 {w[\'surv_ko\']:.1%} 입니다.")\n    print("한국어 서비스에 쓰신다면 \'전체\' 가 아니라 \'한국어\' 열을 보세요.")\n\nby = {n: m for n, m, _ in results}\nif "v2-noop" in by:\n    m = by["v2-noop"]\n    print(f\'v2-noop: rate=1.0 인데 절감 {m["saved"]:.1%} · \'\n          f\'보존율 {m["survival_mean"]:.1%}\')\n    print("아무것도 안 버렸는데 토큰이 늘었습니다. 토큰에서 텍스트를 다시")\n    print("만들면서 \'32,450,000\' 이 \'32, 450, 000\' 처럼 벌어지기 때문입니다.")\nif "v2" in by and "long" in by:\n    print()\n    print(f\'v2 보존 {by["v2"]["survival_mean"]:.1%} vs \'\n          f\'long 보존 {by["long"]["survival_mean"]:.1%} — \'\n          f\'질문을 주는 long 이 오히려 나쁩니다.\')\n    print("작은 모델로 토큰 단위 프루닝을 하면 숫자가 조각나기 때문입니다.")\n'),
 
         md("""
-## 7. 압축률 스윕 — 어디서 무너지나
+## 7. 압축률을 바꿔가며 — 절감과 보존율의 관계
 
-`rate` 는 **남길 비율**입니다. 낮출수록 많이 버립니다.
-언어별로 무너지는 지점이 다른지 봅니다.
+지금까지는 `rate=0.5` 한 점만 봤습니다. 여기서는 `rate` 를 0.9 부터 0.3 까지
+낮춰가며 **절감률과 보존율이 어떻게 함께 움직이는지** 봅니다.
+
+`rate` 는 **남길 비율**입니다. 0.9 면 10% 만 버리고, 0.3 이면 70% 를 버립니다.
+
+표에서 이렇게 보세요.
+
+- 절감률이 오를 때 보존율이 **어느 지점부터** 떨어지기 시작하는가
+- 한국어 열과 영어 열이 **같이 움직이는가, 갈라지는가**
+- 쓸 만한 보존율을 유지하면서 얻을 수 있는 절감률의 상한은 얼마인가
+
 """),
-        code('\n# ── 이 셀의 설정 ──────────────────────────────────────────────\nRATES = [0.9, 0.7, 0.5, 0.3]     # 남길 비율\nRESERVE_DIGIT = True\n\nprint(f"설정 · 변형 v2 · 모델 {MODEL} · rate {RATES} "\n      f"· force_reserve_digit {RESERVE_DIGIT}")\nprint()\n\nrows = []\nfor rate in RATES:\n    recs = []\n    for x in cases:\n        out, meta = compress(x.text, variant="v2", model_name=model_for("v2"),\n                             rate=rate, force_reserve_digit=RESERVE_DIGIT)\n        recs.append({"lang": x.meta["lang"],\n                     "s": survival(out, x.must_include),\n                     "tb": counter(x.text), "ta": counter(out)})\n    tb = sum(r["tb"] for r in recs)\n    ta = sum(r["ta"] for r in recs)\n    g = {lg: [r["s"] for r in recs if r["lang"] == lg] for lg in ("ko", "en")}\n    rows.append([rate, pct(1 - ta / tb),\n                 pct(sum(r["s"] for r in recs) / len(recs)),\n                 pct(min(r["s"] for r in recs)),\n                 pct(sum(g["ko"]) / len(g["ko"])),\n                 pct(sum(g["en"]) / len(g["en"]))])\n    print(f"  rate={rate} 완료", flush=True)\n\ntable(\n    ["rate", "절감", f"보존 전체({len(cases)}건)", "보존 최저",\n     f"한국어({n_ko}건)", f"영어({n_en}건)"],\n    rows,\n    align=["right"] * 6,\n    title=f"압축률 스윕 · 변형 v2 · 모델 {MODEL} "\n          f"· force_reserve_digit={RESERVE_DIGIT}",\n    note="rate 0.7 을 보세요. 영어는 아직 멀쩡한데 한국어는 이미 무너집니다. "\n         "\'전체\' 는 12건 평균이라 이 격차를 가립니다.",\n)\n'),
+        code('\n# ── 이 셀의 설정 ──────────────────────────────────────────────\nRATES = [0.9, 0.7, 0.5, 0.3]     # 남길 비율\nRESERVE_DIGIT = True\n\nprint(f"설정 · 변형 v2 · 모델 {MODEL} · rate {RATES} "\n      f"· force_reserve_digit {RESERVE_DIGIT}")\nprint()\n\nrows = []\nfor rate in RATES:\n    recs = []\n    for x in cases:\n        out, meta = compress(x.text, variant="v2", model_name=model_for("v2"),\n                             rate=rate, force_reserve_digit=RESERVE_DIGIT)\n        recs.append({"lang": x.meta["lang"],\n                     "s": survival(out, x.must_include),\n                     "tb": counter(x.text), "ta": counter(out)})\n    tb = sum(r["tb"] for r in recs)\n    ta = sum(r["ta"] for r in recs)\n    g = {lg: [r["s"] for r in recs if r["lang"] == lg] for lg in ("ko", "en")}\n    rows.append([rate, pct(1 - ta / tb),\n                 pct(sum(r["s"] for r in recs) / len(recs)),\n                 pct(min(r["s"] for r in recs)),\n                 pct(sum(g["ko"]) / len(g["ko"])),\n                 pct(sum(g["en"]) / len(g["en"]))])\n    print(f"  rate={rate} 완료", flush=True)\n\ntable(\n    ["rate", "절감", f"보존 전체({len(cases)}건)", "보존 최저",\n     f"한국어({n_ko}건)", f"영어({n_en}건)"],\n    rows,\n    align=["right"] * 6,\n    title=f"압축률 스윕 · 변형 v2 · 모델 {MODEL} "\n          f"· force_reserve_digit={RESERVE_DIGIT}",\n    note="위에서 아래로 갈수록 많이 버립니다. 한국어와 영어 열이 갈라지기 "\n         "시작하는 지점이 어디인지, 그때 절감률이 얼마인지 보세요.",\n)\n'),
 
         md('\n## 8. 레이턴시 트레이드오프 — 압축은 공짜가 아닙니다\n\n여기까지는 **얼마나 줄었나**만 봤습니다. 그런데 압축 자체도 시간을 씁니다.\n작은 모델을 한 번 더 돌리는 일이니까요.\n\n그래서 세 조건을 **끝에서 끝까지** 재봅니다.\n\n| 재는 것 | 무엇 |\n|---|---|\n| **압축 소요** | LLMLingua 가 텍스트를 줄이는 데 걸린 시간 |\n| **응답 소요** | 그 컨텍스트로 본 모델에 물어보고 답을 받기까지 |\n| **합계** | 사용자가 실제로 기다리는 시간 |\n\n모델 로딩은 미리 끝내고 잽니다. 한 번만 드는 비용이라 매 요청에 포함하면\n오해를 부릅니다.\n\n> 긴 케이스(`longdoc`·`structured`)만 씁니다. 짧은 글은 압축할 것도 없고\n> 시간 차이도 묻힙니다.\n'),
         code('\nimport time\nimport statistics as st\nfrom kit.provider import complete\n\n# ── 이 셀의 설정 ──────────────────────────────────────────────\nRATE = 0.5\nRESERVE_DIGIT = True\nKINDS = ("longdoc", "structured")   # 긴 것만. 짧은 글은 시간 차이가 묻힙니다\nTIERS = ("none", "small", "large")\n\nDEP = env.get("AZURE_OPENAI_DEPLOYMENT")\nuse = [c for c in cases if c.meta["kind"] in KINDS]\nprint(f"설정 · 변형 v2 · rate {RATE} · 유형 {KINDS} · 본 모델 {DEP}")\n\nfor tier in ("small", "large"):\n    L.load("v2", tier)          # 로딩을 먼저 끝냅니다. 측정에 섞이면 안 됩니다.\nprint(f"케이스 {len(use)}건 · 모델 로딩 완료\\n")\n\n\ndef ask(ctx, q):\n    t0 = time.perf_counter()\n    complete(f"{ctx}\\n\\n질문: {q}\\n한 문장으로 짧게 답하세요.",\n             DEP, max_output_tokens=256)\n    return time.perf_counter() - t0\n\n\nrows, detail = [], {}\nfor cond in TIERS:\n    recs = []\n    for c in use:\n        if cond == "none":\n            comp_ms, out = 0.0, c.text\n        else:\n            t0 = time.perf_counter()\n            out, _ = compress(c.text, variant="v2", model_name=cond,\n                              rate=RATE, force_reserve_digit=RESERVE_DIGIT)\n            comp_ms = (time.perf_counter() - t0) * 1000\n        recs.append(dict(lang=c.meta["lang"], comp_ms=comp_ms, lat=ask(out, c.question),\n                         tb=counter(c.text), ta=counter(out),\n                         s=survival(out, c.must_include)))\n    detail[cond] = recs\n\n    tb, ta = sum(r["tb"] for r in recs), sum(r["ta"] for r in recs)\n    ko = [r["s"] for r in recs if r["lang"] == "ko"]\n    en = [r["s"] for r in recs if r["lang"] == "en"]\n    cm = st.median(r["comp_ms"] for r in recs)\n    lt = st.median(r["lat"] for r in recs)\n    rows.append([{"none": "압축 없음", "small": "v2 small", "large": "v2 large"}[cond],\n                 f"{tb:,} → {ta:,}", pct(1 - ta / tb),\n                 pct(sum(ko) / len(ko)), pct(sum(en) / len(en)),\n                 f"{cm:.0f}ms", f"{lt:.2f}s", f"{cm / 1000 + lt:.2f}s"])\n    print(f"  {cond} 완료", flush=True)\n\ntable(\n    ["조건", "토큰", "절감", "보존 한국어", "보존 영어",\n     "압축 소요", "응답 소요", "합계"],\n    rows,\n    align=["left", "right", "right", "right", "right", "right", "right", "right"],\n    title=f"끝에서 끝까지 · 변형 v2 · rate={RATE} · 케이스 {len(use)}건 "\n          f"· 본 모델 {DEP}",\n    note="\'합계\' 가 사용자가 기다리는 시간입니다. 중앙값이며 응답 시간은 "\n         "호출마다 흔들리므로 소수점 아래는 잡음으로 보세요.",\n)\n'),
-        md('\n### 읽어야 할 것\n\n**토큰은 절반으로 줄었는데 합계는 늘었습니다.**\n\n이 규모(약 1,200토큰)에서는 응답 시간이 **입력 길이가 아니라 출력 생성과\n왕복 네트워크**에 좌우됩니다. 입력을 절반으로 줄여도 응답은 거의 그대로인데,\n압축 시간만 얹히는 셈입니다.\n\n| | 무엇을 얻나 | 무엇을 잃나 |\n|---|---|---|\n| 비용 | 입력 토큰 **약 절반** | — |\n| 속도 | — | 압축 시간만큼 **느려짐** |\n| 정확도 | — | 보존율이 100% 아래로 |\n\n**즉 이 규모에서 압축은 비용 최적화이지 속도 최적화가 아닙니다.**\n\n### 그럼 속도에도 도움이 되는 때는\n\n입력이 충분히 커서 **프리필(prefill)이 병목이 될 때**입니다. 수만 토큰을\n넣으면 입력을 읽는 시간 자체가 길어지고, 그때는 절반으로 줄인 효과가\n압축 비용을 넘어섭니다.\n\n경계를 대략 잡으면 이렇습니다.\n\n```\n압축으로 아끼는 시간  ≈  (줄인 토큰 수) × (토큰당 프리필 시간)\n압축에 쓰는 시간      ≈  100~250ms  (v2 기준, 이 코퍼스에서 실측)\n\n앞이 뒤보다 커야 속도로도 이득입니다.\n```\n\n**작은 모델이 압축은 3배 빠릅니다**(100ms vs 232ms). 그런데 보존율은\n`large` 가 낫습니다. 속도가 급하면 `small`, 정확도가 급하면 `large` 로\n가시면 됩니다 — 다만 위에서 보셨듯 **이 규모에서는 둘 다 속도 이득이\n없습니다.**\n'),
+        md("\n### 표를 읽으실 때\n\n**`합계` 열을 `압축 없음` 행과 비교하세요.** 그게 사용자가 실제로 기다리는\n시간입니다. 토큰이 줄었다고 합계가 자동으로 줄지는 않습니다.\n\n세 가지를 확인해 보세요.\n\n1. **압축 소요가 응답 소요에 비해 어느 정도인가** — 응답이 훨씬 크면\n   압축 시간은 묻히고, 비슷하면 그대로 손해로 잡힙니다.\n2. **입력이 절반으로 줄었을 때 응답 소요도 그만큼 줄었는가** — 안 줄었다면\n   그 규모에서는 응답 시간이 입력 길이에 좌우되지 않는다는 뜻입니다.\n3. **`small` 과 `large` 의 압축 소요 차이** — 큰 모델은 정확한 대신 느립니다.\n\n> 응답 소요는 호출마다 흔들립니다. 한 번의 차이는 잡음일 수 있으니,\n> 판단이 필요하시면 셀을 두세 번 돌려보세요.\n\n### 언제 속도에도 이득이 나나\n\n입력이 커서 **프리필이 병목**이 될 때입니다. 손익은 이렇게 갈립니다.\n\n```\n압축으로 아끼는 시간  ≈  (줄인 토큰 수) × (토큰당 프리필 시간)\n압축에 쓰는 시간      ≈  위 표의 '압축 소요'\n\n앞이 뒤보다 커야 속도로도 이득입니다.\n```\n\n컨텍스트가 짧으면 왼쪽이 작아서 이기기 어렵고, 수만 토큰이면 왼쪽이\n커집니다. **본인 워크로드의 실제 입력 길이로 이 셀을 돌려보시는 것**이\n가장 확실합니다.\n"),
 
         *billed_cells(9, '이 랩은 **압축 결과를 토큰에서 다시 만듭니다.** 그 과정에서 `32,450,000` 이 `32, 450, 000` 으로 벌어지기도 하는데, 그렇게 바뀐 글자를 모델 토크나이저가 어떻게 쪼개는지는 tiktoken 추정으로 알 수 없습니다. `rate=1.0` 인데 토큰이 늘었던 것도 같은 이유였습니다.', 'cfg4 = C.load("configs/v2.yaml")\ncs4 = dataset.load(cfg4.dataset["path"])\nparams4 = dict(cfg4.params)\nparams4.pop("variant", None)\nparams4.pop("model_name", None)\n\n# 코퍼스가 ko/en 교대라 앞에서부터 4건을 뽑으면 두 언어가 2건씩 들어옵니다.\n# 3건만 뽑으면 한국어로 기울어 언어 비교가 안 됩니다.\npairs = [(x.id, x.text,\n          compress(x.text, variant="v2", model_name=model_for("v2"), **params4)[0])\n         for x in cs4]', limit=4),
 
         md("""
-## 정리
+## 정리 — 이 랩에서 확인하신 것
 
-- **세 변형 중 `v2` 만 쓸 만했습니다** — 작은 모델로 토큰 단위 프루닝을 하면
-  숫자와 식별자가 조각납니다
-- **한국어가 영어보다 먼저 무너집니다** — 같은 `rate` 에서 영어가 91.7% 일 때
-  한국어는 66.7% 였습니다
-- **한국어는 애초에 토큰을 더 씁니다** — 문자당 1.8배. 압축이 더 절실한데
-  품질은 더 나쁩니다
-- **`rate=1.0` 이 무손실이 아닙니다** — 토큰에서 텍스트를 재구성하면서
-  숫자 서식이 벌어져 오히려 늘어납니다
-- **숫자·식별자가 답인 문서에는 쓰지 마세요**
+숫자는 **고른 모델·`rate`·코퍼스에 따라 달라집니다.** 여기서는 무엇을
+확인하는 랩이었는지만 정리합니다. 실제 값은 위의 표를 보세요.
 
-### 결론을 일반화하지 마세요
+- **변형마다 버리는 근거가 다릅니다** — `v1`/`long` 은 토큰별 정보량,
+  `v2` 는 학습된 판정입니다. 같은 `rate` 라도 결과가 다른 이유입니다.
+- **절감률만으로 판단할 수 없습니다** — 압축을 거의 안 해도 보존율은
+  100% 로 나옵니다. 두 값을 항상 같이 보세요.
+- **언어가 결과를 바꿉니다** — 같은 내용의 한·영 쌍으로 확인하셨습니다.
+  전체 평균은 언어별 격차를 가립니다.
+- **`rate=1.0` 이 무손실이 아닐 수 있습니다** — 토큰에서 텍스트를
+  재구성하는 방식이면 서식이 바뀌고 토큰이 늘 수도 있습니다.
+- **줄인 토큰이 곧 시간 절약은 아닙니다** — 압축 자체가 시간을 씁니다.
+- **추정과 과금은 다릅니다** — 마지막 절에서 API 실측으로 확인하셨습니다.
 
-이 랩은 **0.5B 모델**로 돌립니다. 논문은 7B 를 썼습니다.
-"LongLLMLingua 가 나쁘다" 가 아니라 **"작은 순위 모델로는 못 쓴다"** 입니다.
-`configs/*.yaml` 의 `model_name` 으로 바꾸실 수 있습니다.
+### 다른 조건으로도 돌려보세요
+
+이 랩의 결과는 **모델과 `rate` 에 크게 좌우됩니다.** 위의 드롭다운에서
+`large` 를 고르거나 `rate` 를 바꿔 다시 돌리시면, 같은 코드로 전혀 다른
+그림이 나옵니다. 논문은 `v1`/`long` 에 7B 를 썼고 이 노트북의 기본값은
+0.5B 입니다.
 """),
     ])
 
