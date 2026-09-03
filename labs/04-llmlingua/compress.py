@@ -83,6 +83,8 @@ def main() -> int:
     ap.add_argument("--refresh-tokens", action="store_true")
     ap.add_argument("--device", default="cpu", help="cpu | mps | cuda")
     ap.add_argument("--sweep", help="rate 를 여러 값으로 (예: 0.3,0.5,0.7)")
+    ap.add_argument("--model", help="모델 별칭(small|large|paper) 또는 "
+                                    "HuggingFace 경로. config 값을 덮어씁니다")
     args = ap.parse_args()
 
     cfg = C.load(args.config)
@@ -97,7 +99,13 @@ def main() -> int:
 
     params = dict(cfg.params)
     variant = params.pop("variant", "v2")
-    model_name = params.pop("model_name", None)
+    model_name = args.model or params.pop("model_name", None)
+    params.pop("model_name", None)
+    try:
+        resolved = L.resolve_model(variant, model_name)
+    except ValueError as e:
+        print(f"설정 오류\n  {e}", file=sys.stderr)
+        return 2
     params["device"] = args.device
 
     # 설정을 읽자마자 확인합니다. 12건을 다 돌린 뒤에 알려주면 늦습니다.
@@ -124,7 +132,10 @@ def main() -> int:
 
     print(f"코퍼스 {path}")
     print(f"  케이스 {info['n_cases']}건 · {info['n_chars']:,}자 · 언어 {langs}")
-    print(f"  변형 {variant} · 모델 {model_name or L.DEFAULT_MODEL[variant]}")
+    tier = next((k for k, (n, _) in L.MODELS[variant].items() if n == resolved), None)
+    size = L.MODELS[variant][tier][1] if tier else "?"
+    print(f"  변형 {variant} · 모델 {resolved}"
+          + (f"  [{tier} · {size}]" if tier else ""))
     print(f"  파라미터 {params}")
     print(f"  토큰 측정 {counter.backend}")
     if getattr(counter, "preloaded", 0):

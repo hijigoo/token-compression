@@ -32,7 +32,7 @@ cd labs/01-lossless-structure && jupyter lab run.ipynb
 | [`01-lossless-structure`](labs/01-lossless-structure/) | 표현의 중복만 제거 | 28.5% | 100% | 없음 | 완료 |
 | [`02-handle-ref`](labs/02-handle-ref/) | 밖에 두고 핸들만 남김 | 50.9% | 100% | 없음 | 완료 |
 | [`03-summarize-llm`](labs/03-summarize-llm/) | LLM 추상 요약 | 89.2% | 100% | **API** | 완료 |
-| [`04-llmlingua`](labs/04-llmlingua/) | 토큰 프루닝 (3형제 · 한·영) | 46.3% | 0% | torch | 완료 |
+| [`04-llmlingua`](labs/04-llmlingua/) | 토큰 프루닝 (3형제 · 한·영) | 48.1% | 0% | torch | 완료 |
 | `05-headroom` | CCR 라이브러리 | — | — | pip | 예정 |
 | `06-opencode` | 에이전트 세션 압축 | — | — | bun/npm | 예정 |
 

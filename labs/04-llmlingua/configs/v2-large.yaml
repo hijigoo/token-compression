@@ -1,0 +1,23 @@
+# LLMLingua-2 의 **큰 모델**입니다. 논문이 쓴 것이고 2.2GB 를 받습니다.
+#
+# v2.yaml(small, 700MB) 과 비교해 보세요. 특히 한국어에서 차이가 큽니다.
+# 작은 모델은 '32,450,000' 을 '32, 450, 000' 으로 벌려 놓는데
+# 이 모델은 쉼표까지 그대로 둡니다.
+name: v2-large
+lab: 04-llmlingua
+
+dataset:
+  path: ../../data/sample-bilingual
+
+model: gpt-5.4
+
+params:
+  variant: v2
+  model_name: large         # small | large | 또는 HuggingFace 경로
+  rate: 0.5
+  force_reserve_digit: true
+  force_tokens: ["\n", "?"]
+
+tokenizer:
+  mode: both            # both(기본) | api | local
+  cache: true

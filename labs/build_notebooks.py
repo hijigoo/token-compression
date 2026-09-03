@@ -1541,7 +1541,7 @@ def nb_04() -> dict:
 잡아주세요.
 """),
         md("## 1. kit 과 어댑터 불러오기"),
-        code(BOOTSTRAP + '\nimport lingua as L\nfrom compress import compress\nfrom kit.metrics import survival\n\ntable(\n    ["변형", "무엇이 다른가", "필요한 것"],\n    [["v1", "토큰별 정보량으로 프루닝", "인과 LM"],\n     ["long", "질문을 주고 문단별 중요도를 함께 봄", "인과 LM + 질문"],\n     ["v2", "분류 모델이 토큰을 남길지 판정", "전용 인코더"]],\n    align=["left", "left", "left"],\n    title="LLMLingua 3형제 — 같은 클래스, 다른 파라미터",\n    note="논문은 v1/long 에 7B 를 썼습니다. 여기서는 0.5B 를 쓰므로 "\n         "그만큼 결과가 나쁩니다. 아래에서 그 영향을 직접 봅니다.",\n)\nfor k, v in L.DEFAULT_MODEL.items():\n    print(f"  {k:5s} {v}")\n'),
+        code(BOOTSTRAP + '\nimport lingua as L\nfrom compress import compress\nfrom kit.metrics import survival\n\ntable(\n    ["변형", "무엇이 다른가", "필요한 것"],\n    [["v1", "토큰별 정보량으로 프루닝", "인과 LM"],\n     ["long", "질문을 주고 문단별 중요도를 함께 봄", "인과 LM + 질문"],\n     ["v2", "분류 모델이 토큰을 남길지 판정", "전용 인코더"]],\n    align=["left", "left", "left"],\n    title="LLMLingua 3형제 — 같은 클래스, 다른 파라미터",\n)\n\n# 모델은 크기별로 고를 수 있습니다. 기본은 small 입니다.\ntable(\n    ["변형", "별칭", "모델", "크기"],\n    [[v, tier, name.split("/")[-1][:42], size]\n     for v, tiers in L.MODELS.items() for tier, (name, size) in tiers.items()],\n    align=["left", "left", "left", "left"],\n    title="고를 수 있는 모델",\n    note="기본은 small 입니다 — 받자마자 돌려보실 수 있어야 해서입니다. "\n         "config 의 model_name 이나 --model 로 바꾸실 수 있습니다.",\n)\n'),
 
         md("""
 ## 지표 두 가지 — 표를 읽기 전에

@@ -35,11 +35,51 @@ from typing import Any, Dict, List, Optional, Tuple
 # 것이므로 작은 모델로 충분합니다.
 # ══════════════════════════════════════════════════════════════════
 
-DEFAULT_MODEL = {
-    "v1": "Qwen/Qwen2.5-0.5B",
-    "long": "Qwen/Qwen2.5-0.5B",
-    "v2": "microsoft/llmlingua-2-bert-base-multilingual-cased-meetingbank",
+# 크기별로 골라 쓸 수 있게 해 둡니다. 기본은 small 입니다 — 저장소를 받자마자
+# 돌려볼 수 있어야 하고, 13GB 를 강제로 받게 하고 싶지 않았습니다.
+#
+# 다만 **작은 모델은 결과가 확연히 나쁩니다.** 특히 한국어에서 그렇습니다.
+# 실제로 쓰실 거라면 large 로 한 번 재보시고 판단하세요.
+MODELS = {
+    "v1": {
+        "small": ("Qwen/Qwen2.5-0.5B", "약 1GB"),
+        "large": ("Qwen/Qwen2.5-1.5B", "약 3GB"),
+        "paper": ("NousResearch/Llama-2-7b-hf", "약 13GB · 논문이 쓴 모델"),
+    },
+    "long": {
+        "small": ("Qwen/Qwen2.5-0.5B", "약 1GB"),
+        "large": ("Qwen/Qwen2.5-1.5B", "약 3GB"),
+        "paper": ("NousResearch/Llama-2-7b-hf", "약 13GB · 논문이 쓴 모델"),
+    },
+    "v2": {
+        "small": ("microsoft/llmlingua-2-bert-base-multilingual-cased-meetingbank",
+                  "약 700MB"),
+        "large": ("microsoft/llmlingua-2-xlm-roberta-large-meetingbank",
+                  "약 2.2GB · 논문이 쓴 모델"),
+    },
 }
+
+DEFAULT_MODEL = {k: v["small"][0] for k, v in MODELS.items()}
+
+
+def resolve_model(variant: str, name: Optional[str]) -> str:
+    """모델 이름을 정합니다.
+
+    small/large/paper 같은 별칭을 쓰거나 HuggingFace 경로를 그대로 주셔도
+    됩니다. 별칭이면 표에서 찾고, 아니면 그대로 씁니다.
+    """
+    if not name:
+        return DEFAULT_MODEL[variant]
+    tiers = MODELS[variant]
+    if name in tiers:
+        return tiers[name][0]
+    if "/" not in name:
+        raise ValueError(
+            f"모르는 모델 별칭: {name}\n"
+            f"  {variant} 에서 쓸 수 있는 별칭: {list(tiers)}\n"
+            f"  또는 HuggingFace 경로를 그대로 주세요 (예: Qwen/Qwen2.5-3B)")
+    return name
+
 
 # 변형마다 실제로 쓰는 인자입니다. 목록에 없는 것이 들어오면 거부합니다.
 ALLOWED = {
@@ -66,9 +106,9 @@ def load(variant: str, model_name: Optional[str] = None, device: str = "cpu"):
     모델 로딩이 수십 초 걸립니다. 케이스마다 새로 만들면 12건에 10분이
     넘어가므로 프로세스 안에서 재사용합니다.
     """
-    if variant not in DEFAULT_MODEL:
+    if variant not in MODELS:
         raise ValueError(f"모르는 변형: {variant} (v1 | long | v2)")
-    name = model_name or DEFAULT_MODEL[variant]
+    name = resolve_model(variant, model_name)
     key = (variant, name)
     if key not in _CACHE:
         from llmlingua import PromptCompressor
@@ -135,7 +175,7 @@ def compress(text: str, variant: str = "v2", question: str = "",
 
     return out, {
         "variant": variant,
-        "model": model_name or DEFAULT_MODEL[variant],
+        "model": resolve_model(variant, model_name),
         "n_contexts": len(ctx),
         # 라이브러리가 자기 토크나이저로 센 값입니다. 랩의 토큰 수와 기준이
         # 다르므로 참고용으로만 남깁니다.
