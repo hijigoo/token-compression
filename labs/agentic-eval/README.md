@@ -18,9 +18,9 @@ DeepSWE 태스크를 실제로 풀게 해서 **pass@1**을 봅니다. 느리고 
 ```
 setup.sh          deep-swe 클론 + pier 설치
 deep-swe/         데이터셋 (커밋 제외). 코퍼스가 아니라 Docker 픽스처라 여기 둡니다
-deep-swe-ko/      한국어판 데이터셋 (커밋 제외). i18n.py stage 가 만듭니다
-i18n.py           지시문 한국어 번역 + 검증 + 스테이징
-i18n/ko/          번역 결과 (커밋). 번역 비용을 다시 치르지 않으려고 남깁니다
+deep-swe-ko/      한국어판 데이터셋 (커밋 제외). translate.py stage 가 만듭니다
+translate.py           지시문 한국어 번역 + 검증 + 스테이징
+translations/ko/          번역 결과 (커밋). 번역 비용을 다시 치르지 않으려고 남깁니다
 proxy.py          OpenAI 호환 압축 프록시 (표준 라이브러리만 씁니다)
 compressors/      라이브러리 하나가 파일 하나입니다
 experiments/      질문 하나가 파일 하나이자 pier 실행 한 번입니다
@@ -54,10 +54,10 @@ DeepSWE 의 `instruction.md` 는 전부 영어입니다. 한국어에서도 압�
 하므로 지시문만 번역하면 됩니다.**
 
 ```bash
-python i18n.py list                      # 상태 보기
-python i18n.py translate <태스크>…        # 영어 → 한국어 (--all 로 전체)
-python i18n.py verify                    # 식별자가 살아남았는지 검사
-python i18n.py stage                     # deep-swe-ko/tasks/ 생성
+python translate.py list                      # 상태 보기
+python translate.py translate <태스크>…        # 영어 → 한국어 (--all 로 전체)
+python translate.py verify                    # 식별자가 살아남았는지 검사
+python translate.py stage                     # deep-swe-ko/tasks/ 생성
 ```
 
 `stage` 는 `instruction.md` 만 한국어로 바꾸고 나머지(Dockerfile·테스트·정답

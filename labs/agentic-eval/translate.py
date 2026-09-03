@@ -16,10 +16,10 @@ DeepSWE 의 `instruction.md` 는 전부 영어다. 한국어에서도 압축이 
 
 쓰는 법
 -------
-    python i18n.py list                  상태 보기
-    python i18n.py translate <태스크>…    번역 (--all 로 전체)
-    python i18n.py verify                식별자가 살아남았는지 검사
-    python i18n.py stage                 deep-swe-ko/tasks/ 생성
+    python translate.py list                  상태 보기
+    python translate.py translate <태스크>…    번역 (--all 로 전체)
+    python translate.py verify                식별자가 살아남았는지 검사
+    python translate.py stage                 deep-swe-ko/tasks/ 생성
 
 번역 결과는 `i18n/ko/<태스크>.md` 에 남는다. `deep-swe/` 는 gitignore 대상이라
 다시 클론하면 사라지지만, 이쪽은 커밋되므로 번역 비용을 다시 치르지 않는다.
@@ -37,7 +37,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 TASKS_EN = HERE / "deep-swe" / "tasks"
-KO_DIR = HERE / "i18n" / "ko"
+KO_DIR = HERE / "translations" / "ko"
 STAGE_KO = HERE / "deep-swe-ko" / "tasks"
 
 sys.path.insert(0, str(REPO / "labs"))
@@ -180,7 +180,7 @@ def cmd_translate(args) -> int:
 
     log(f"번역 {done}건" + (f" · 이미 있어 건너뜀 {skipped}건" if skipped else ""))
     if done:
-        print("  다음: python i18n.py verify")
+        print("  다음: python translate.py verify")
     return 0
 
 
@@ -224,7 +224,7 @@ def cmd_verify(args) -> int:
         print(f"\033[33m! {len(bad)}/{len(targets)}건에 문제가 있습니다.\033[0m")
         print("  식별자가 번역되면 에이전트가 대상을 못 찾아 태스크가 실패합니다.")
         print("  그 실패를 압축 탓으로 오해하게 되므로, 고친 뒤 사용하세요.")
-        print("  다시 시도: python i18n.py translate <태스크> --force")
+        print("  다시 시도: python translate.py translate <태스크> --force")
         return 1
 
     print(f"\033[32m✓ {len(targets)}건 모두 통과\033[0m")
@@ -296,7 +296,7 @@ def pick_tasks(args) -> list[str]:
     if getattr(args, "all", False):
         return sorted(p.name for p in TASKS_EN.iterdir() if p.is_dir())
     if not args.tasks:
-        die("태스크를 지정하거나 --all 을 주세요. 목록은 i18n.py list 로 봅니다.")
+        die("태스크를 지정하거나 --all 을 주세요. 목록은 translate.py list 로 봅니다.")
 
     known = {p.name for p in TASKS_EN.iterdir() if p.is_dir()}
     unknown = [t for t in args.tasks if t not in known]
