@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from . import apply_to_messages
+from . import apply_to_messages, device
 
 MODEL = "microsoft/llmlingua-2-xlm-roberta-large-meetingbank"
 
@@ -27,7 +27,8 @@ def _compressor():
         ) from e
 
     # 모델 로딩은 수 초~수십 초 걸린다. 프록시 기동 시 1회만 수행한다.
-    return PromptCompressor(model_name=MODEL, use_llmlingua2=True)
+    return PromptCompressor(model_name=MODEL, use_llmlingua2=True,
+                            device_map=device())
 
 
 def compress(messages: list[dict], ratio: float) -> list[dict]:
@@ -40,6 +41,9 @@ def compress(messages: list[dict], ratio: float) -> list[dict]:
         result = comp.compress_prompt(
             text,
             rate=ratio,
+            # 숫자가 토큰 경계에서 잘리는 것을 막는다. 기본값이 False 라
+            # 명시하지 않으면 32,450,000 같은 값이 조용히 망가진다.
+            force_reserve_digit=True,
             force_tokens=["\n", "?", ".", "!", ",", ":", "{", "}", "(", ")"],
             drop_consecutive=True,
         )
