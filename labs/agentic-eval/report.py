@@ -24,6 +24,9 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 REPORTS = REPO / "reports"
 
+# md 에 심은 자리표시자 -> SVG. build_html 이 끼워 넣는다.
+CHARTS: dict = {}
+
 
 # ═══════════════════════════════════════════════════════════════
 # 집계
@@ -65,6 +68,162 @@ def pct(x, digits=1):
 
 def signed(x, digits=1):
     return f"{x * 100:+.{digits}f}%"
+
+
+# ═══════════════════════════════════════════════════════════════
+# 그래프
+#
+# 마크다운에는 막대를 글자로 그리고, HTML 에는 같은 데이터를 SVG 로 그린다.
+# 외부 라이브러리를 쓰지 않는 이유는 리포트가 파일 하나로 열려야 하기
+# 때문이다(file:// 로 열어도 그려져야 한다).
+#
+# HTML 쪽은 <!--CHART:이름--> 자리표시자를 md 에 심어 두고, md_to_html 이
+# 그 자리에 SVG 를 끼워 넣는다. 마크다운으로 읽는 사람은 바로 위의 글자
+# 막대를 본다.
+# ═══════════════════════════════════════════════════════════════
+
+BAR = "█"
+
+
+def ascii_bar(value: float, vmax: float, width: int = 24) -> str:
+    if vmax <= 0:
+        return ""
+    n = max(0, min(width, round(value / vmax * width)))
+    return BAR * n
+
+
+def chart_tradeoff(by_arm: dict, arms: dict) -> tuple:
+    """절감 대비 식별자 보존. 이 리포트에서 가장 중요한 그림이다."""
+    pts = []
+    for (n,), v in by_arm.items():
+        if not v or not arms[n]["group"].startswith(("스윕", "대조")):
+            continue
+        fam = ("truncate" if n.startswith("truncate") else
+               "v2s" if n.startswith("v2s") else
+               "v2" if n.startswith("v2") else "v1")
+        pts.append((fam, n, v["reduction"], v["ident"]))
+    if not pts:
+        return "", ""
+
+    md = ["**절감(가로) 대비 식별자 보존(막대)** — 오른쪽 아래일수록 많이 "
+          "줄이면서 잘 지킨 것입니다.", ""]
+    md.append("```")
+    for fam, n, r, i in sorted(pts, key=lambda x: (x[0], -x[2])):
+        md.append(f"{n:<16} 절감 {r * 100:5.1f}%  식별자 "
+                  f"{ascii_bar(i, 1.0):<24} {i * 100:5.1f}%")
+    md.append("```")
+
+    W, H, PL, PB = 720, 380, 56, 44
+    body = []
+    for gx in range(0, 101, 20):
+        x = PL + (W - PL - 20) * gx / 100
+        body.append(f'<line x1="{x:.0f}" y1="10" x2="{x:.0f}" y2="{H - PB}" '
+                    f'class="grid"/><text x="{x:.0f}" y="{H - PB + 16}" '
+                    f'class="ax" text-anchor="middle">{gx}%</text>')
+    for gy in range(0, 101, 20):
+        y = (H - PB) - (H - PB - 10) * gy / 100
+        body.append(f'<line x1="{PL}" y1="{y:.0f}" x2="{W - 20}" y2="{y:.0f}" '
+                    f'class="grid"/><text x="{PL - 8}" y="{y + 4:.0f}" '
+                    f'class="ax" text-anchor="end">{gy}%</text>')
+    color = {"truncate": "#9aa4b2", "v1": "#e0b341",
+             "v2": "#63c98f", "v2s": "#e06c75"}
+    for fam, n, r, i in pts:
+        x = PL + (W - PL - 20) * min(max(r, 0), 1)
+        y = (H - PB) - (H - PB - 10) * i
+        body.append(f'<circle cx="{x:.0f}" cy="{y:.0f}" r="6" '
+                    f'fill="{color[fam]}"><title>{html.escape(n)} · '
+                    f'절감 {r * 100:.1f}% · 식별자 {i * 100:.1f}%</title></circle>')
+    lg = []
+    for k, c in color.items():
+        lg.append(f'<circle cx="0" cy="-4" r="5" fill="{c}"/>'
+                  f'<text x="10" y="0" class="ax">{k}</text>')
+    legend = "".join(f'<g transform="translate({PL + n * 110},{H - 8})">{g}</g>'
+                     for n, g in enumerate(lg))
+    svg = (f'<svg viewBox="0 0 {W} {H}" class="chart">'
+           f'<text x="{PL}" y="0" class="ax"></text>'
+           + "".join(body)
+           + f'<text x="{W // 2}" y="{H - 24}" class="ax" '
+             f'text-anchor="middle">절감률 →</text>'
+           + f'<text transform="translate(14,{H // 2}) rotate(-90)" '
+             f'class="ax" text-anchor="middle">식별자 보존율 →</text>'
+           + legend + "</svg>")
+    return "\n".join(md), svg
+
+
+def chart_pairs(by_arm: dict) -> tuple:
+    """force_tokens 켬/끔 짝 비교 — 경로 보존."""
+    pairs = []
+    for (n,), v in by_arm.items():
+        if "-nt-" not in n or not v:
+            continue
+        twin = n.replace("-nt-", "-")
+        tv = by_arm.get((twin,))
+        if tv:
+            pairs.append((twin, tv["path"], v["path"]))
+    if not pairs:
+        return "", ""
+    pairs.sort()
+
+    md = ["**`force_tokens` 켬 → 끔 · 경로 보존**", "", "```"]
+    for n, a, b in pairs:
+        md.append(f"{n:<14} 켬 {ascii_bar(a, 1.0, 18):<18} {a * 100:5.1f}%")
+        md.append(f"{'':<14} 끔 {ascii_bar(b, 1.0, 18):<18} {b * 100:5.1f}%")
+    md.append("```")
+
+    W, rowh, PL = 720, 34, 130
+    H = 24 + rowh * len(pairs)
+    body = []
+    for k, (n, a, b) in enumerate(pairs):
+        y = 16 + rowh * k
+        body.append(f'<text x="{PL - 10}" y="{y + 14}" class="ax" '
+                    f'text-anchor="end">{html.escape(n)}</text>')
+        for j, (val, col) in enumerate(((a, "#e06c75"), (b, "#63c98f"))):
+            wpx = (W - PL - 70) * val
+            body.append(f'<rect x="{PL}" y="{y + j * 12}" width="{wpx:.0f}" '
+                        f'height="10" fill="{col}" rx="2"/>')
+        body.append(f'<text x="{W - 62}" y="{y + 9}" class="ax">'
+                    f'{a * 100:.0f}%</text>')
+        body.append(f'<text x="{W - 62}" y="{y + 21}" class="ax">'
+                    f'{b * 100:.0f}%</text>')
+    svg = (f'<svg viewBox="0 0 {W} {H}" class="chart">' + "".join(body) +
+           '</svg><p class="meta">위 막대(빨강)가 켬, 아래(초록)가 끔입니다.</p>')
+    return "\n".join(md), svg
+
+
+def chart_latency(by_arm: dict, arms: dict) -> tuple:
+    vals = [(n, v["latency"]) for (n,), v in by_arm.items()
+            if v and not n.startswith("truncate")]
+    if not vals:
+        return "", ""
+    fam = {}
+    for n, l in vals:
+        k = ("v2s" if n.startswith("v2s") else
+             "v2" if n.startswith("v2") else "v1")
+        fam.setdefault(k, []).append(l)
+    rows = [(k, st.mean(v)) for k, v in fam.items()]
+    rows.sort(key=lambda r: -r[1])
+    vmax = max(r[1] for r in rows)
+
+    md = ["**컨텍스트 한 벌을 압축하는 데 걸린 시간 (평균)**", "", "```"]
+    for k, l in rows:
+        md.append(f"{k:<6} {ascii_bar(l, vmax, 30):<30} {l:6.2f}s "
+                  f"(30턴이면 {l * 30:5.0f}s)")
+    md.append("```")
+
+    W, rowh, PL = 720, 30, 70
+    H = 12 + rowh * len(rows)
+    body = []
+    for k, (name, l) in enumerate(rows):
+        y = 8 + rowh * k
+        body.append(f'<text x="{PL - 10}" y="{y + 15}" class="ax" '
+                    f'text-anchor="end">{name}</text>')
+        body.append(f'<rect x="{PL}" y="{y + 4}" '
+                    f'width="{(W - PL - 90) * l / vmax:.0f}" height="15" '
+                    f'fill="#6ea8fe" rx="2"/>')
+        body.append(f'<text x="{W - 84}" y="{y + 16}" class="ax">'
+                    f'{l:.2f}s</text>')
+    return "\n".join(md), (f'<svg viewBox="0 0 {W} {H}" class="chart">'
+                            + "".join(body) + "</svg>")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -181,8 +340,79 @@ def build_md(d: dict) -> str:
                ["left", "right", "left"]))
     w()
 
+    # ── 읽는 법 ───────────────────────────────────────────────
+    w("## 2. 표를 읽는 법")
+    w()
+    w("### 조건 이름 규칙")
+    w()
+    w("`v2-nt-r0.5` 처럼 붙여 씁니다. 세 조각입니다.")
+    w()
+    w("```")
+    w("v2  -  nt  -  r0.5")
+    w(" |      |      +-- rate. 남길 비율입니다. 0.5 면 절반만 남깁니다")
+    w(" |      +--------- 옵션 꼬리표. 없으면 기본 설정입니다")
+    w(" +---------------- 압축기")
+    w("```")
+    w()
+    w(md_table(
+        ["조각", "값", "뜻"],
+        [["압축기", "`truncate`", "그냥 뒤를 자릅니다. 대조군입니다"],
+         ["", "`v1`", "LLMLingua v1 — 생성 모델의 perplexity 로 고릅니다"],
+         ["", "`v2`", "LLMLingua-2 — 전용 분류 모델 (큰 것, 2.2GB)"],
+         ["", "`v2s`", "LLMLingua-2 — 같은 알고리즘, 작은 모델 (700MB)"],
+         ["꼬리표", "(없음)", "기본 설정"],
+         ["", "`nt`", "`force_tokens` 를 껐습니다 (no tokens)"],
+         ["", "`no-digit`", "`force_reserve_digit` 을 껐습니다"],
+         ["", "`no-drop`", "`drop_consecutive` 를 껐습니다"],
+         ["", "`no-tokens`", "`force_tokens` 를 껐습니다"],
+         ["", "`keeplast0`", "마지막 메시지 보호를 껐습니다"],
+         ["", "`nosysguard`", "system 프롬프트도 압축했습니다"],
+         ["", "`minchars0`", "짧은 메시지도 압축했습니다"],
+         ["rate", "`r0.3`~`r0.9`", "낮을수록 세게 압축합니다"]],
+        ["left", "left", "left"]))
+    w()
+    w("> `nt` 와 `no-tokens` 는 같은 설정입니다. 앞의 것은 압축률을 훑는 "
+      "스윕에서, 뒤의 것은 `rate=0.5` 고정 절제에서 쓴 이름입니다.")
+    w()
+    w("### 각 열이 무엇인가")
+    w()
+    w(md_table(
+        ["열", "무엇", "높으면", "어떻게 계산했나"],
+        [["갈래", "이 조건을 왜 돌렸나", "—", "—"],
+         ["rate", "남길 비율(설정값)", "덜 압축", "설정 그대로"],
+         ["토큰 전 → 후", "케이스 14개 합계", "—", "tiktoken o200k_base"],
+         ["절감", "토큰이 줄어든 비율", "**좋음**", "1 − 후/전"],
+         ["식별자", "함수·클래스·변수명이 남은 비율", "**좋음**",
+          "원문에서 뽑은 40개 중 압축 후에도 그대로 있는 개수"],
+         ["경로", "파일 경로가 남은 비율", "**좋음**", "같은 방식, 경로 20개"],
+         ["숫자", "임계값·크기가 남은 비율", "**좋음**", "같은 방식, 숫자 10개"],
+         ["지연", "컨텍스트 한 벌 압축에 걸린 시간", "**나쁨**", "케이스별 중앙값"]],
+        ["left", "left", "center", "left"]))
+    w()
+    w("**절감과 나머지는 방향이 반대입니다.** 절감만 크고 보존율이 낮으면 "
+      "쓸 수 없습니다. 둘을 함께 보셔야 합니다.")
+    w()
+    w("### 압축기 옵션 세 가지")
+    w()
+    w("`llmlingua` 라이브러리에 넘기는 인자입니다. 이름만으로는 무엇을 하는지 "
+      "짐작하기 어려워 따로 적습니다.")
+    w()
+    w(md_table(
+        ["옵션", "이름이 주는 인상", "실제로 하는 일", "이 랩의 기본값"],
+        [["`force_reserve_digit`", "숫자를 지킨다",
+          "숫자 토큰을 버리지 않도록 가중치를 줍니다. 다만 숫자가 여러 "
+          "토큰으로 쪼개져 있으면 완전히 막지는 못합니다", "**켬**"],
+         ["`drop_consecutive`", "연달아 나오는 것을 버린다",
+          "같은 토큰이 이어지면 하나만 남깁니다. 반복이 많은 로그에서 "
+          "절감이 커집니다", "**켬**"],
+         ["`force_tokens`", "이 문자들을 지킨다",
+          "⚠️ **반대로 동작합니다.** 해당 문자를 별도 토큰으로 떼어내서, "
+          "되조립할 때 주변에 공백이 끼어듭니다. 5-1 절을 보세요", "**끔**"]],
+        ["left", "left", "left", "center"]))
+    w()
+
     # ── 전체 결과 ─────────────────────────────────────────────
-    w("## 2. 전체 결과")
+    w("## 3. 전체 결과")
     w()
     by_arm = agg(runs, ("arm",))
     rows = []
@@ -202,11 +432,27 @@ def build_md(d: dict) -> str:
                ["left", "left", "right", "right", "right",
                 "right", "right", "right", "right"]))
     w()
+    md_c, svg_c = chart_tradeoff(by_arm, arms)
+    if md_c:
+        w("### 한눈에 — 절감과 보존의 맞바꿈")
+        w()
+        w("<!--CHART:tradeoff-->")
+        w(md_c)
+        w()
     w(_read_all(by_arm, arms))
     w()
+    md_l, svg_l = chart_latency(by_arm, arms)
+    if md_l:
+        w("### 지연")
+        w()
+        w("<!--CHART:latency-->")
+        w(md_l)
+        w()
+    CHARTS.clear()
+    CHARTS.update(tradeoff=svg_c, latency=svg_l)
 
     # ── 언어 ──────────────────────────────────────────────────
-    w("## 3. 한국어 vs 영어")
+    w("## 4. 한국어 vs 영어")
     w()
     by_lang = agg(runs, ("arm", "lang"))
     rows = []
@@ -227,7 +473,7 @@ def build_md(d: dict) -> str:
     w()
 
     # ── 태스크 ────────────────────────────────────────────────
-    w("## 4. 태스크별로 갈리나")
+    w("## 5. 태스크별로 갈리나")
     w()
     w("MS 문서의 핵심 결론이 \"태스크 유형에 따라 달라진다\"였습니다. "
       "같은 조건에서 태스크만 바꿔 봅니다.")
@@ -257,7 +503,7 @@ def build_md(d: dict) -> str:
     w()
 
     # ── 절제 ──────────────────────────────────────────────────
-    w("## 5. 옵션 하나씩 꺼 보기")
+    w("## 6. 옵션 하나씩 꺼 보기")
     w()
     w("옵션을 여러 개 동시에 바꾸면 무엇 덕분인지 알 수 없습니다. "
       "`rate=0.5` 를 고정하고 하나씩만 껐습니다.")
@@ -290,13 +536,13 @@ def build_md(d: dict) -> str:
         w()
 
     # ── MS 문서 대비 ──────────────────────────────────────────
-    w("## 6. MS 공유 문서와 견주면")
+    w("## 7. MS 공유 문서와 견주면")
     w()
     w(_read_vs_ms(by_arm, by_lang, d))
     w()
 
     # ── 종합 ──────────────────────────────────────────────────
-    w("## 7. 정리")
+    w("## 8. 정리")
     w()
     w(_read_summary(by_arm, by_lang, d))
     w()
@@ -310,6 +556,71 @@ def build_md(d: dict) -> str:
     w("pier run --config <출력된 en/pier.yaml>")
     w("```")
     w()
+    # ── 부록 ──────────────────────────────────────────────────
+    w("## 부록. 조건별 실행 파라미터")
+    w()
+    w("표의 조건 하나가 어떤 설정으로 돌았는지 전부 적습니다. "
+      "`results.json` 에도 같은 값이 들어 있습니다.")
+    w()
+    rows = []
+    for a in d["arms"]:
+        pr = a.get("params") or {}
+        pt = a.get("protect") or {}
+        rows.append([
+            f"`{a['name']}`", a["compressor"], a["model"], a["rate"],
+            "켬" if pr.get("force_reserve_digit") else ("끔" if pr else "—"),
+            "켬" if pr.get("drop_consecutive") else ("끔" if pr else "—"),
+            "켬" if pr.get("force_tokens") else ("끔" if pr else "—"),
+            pt.get("keep_last", "—"), pt.get("min_chars", "—"),
+            "보호" if pt.get("skip_system") else "압축",
+        ])
+    w(md_table(
+        ["조건", "compressor", "모델", "rate", "digit", "drop", "tokens",
+         "keep_last", "min_chars", "system"],
+        rows,
+        ["left", "left", "left", "right", "center", "center", "center",
+         "right", "right", "center"]))
+    w()
+    w("### 같은 조건을 직접 돌려보시려면")
+    w()
+    w("벤치마크는 이렇게 재현합니다.")
+    w()
+    w("```bash")
+    w("cd labs/agentic-eval")
+    w(f"./.venv/bin/python benchmark.py --name {d['name']}")
+    w(f"./.venv/bin/python report.py {d['name']}")
+    w("```")
+    w()
+    w("조건 하나만 손으로 확인하실 때는 압축기를 직접 부르시면 됩니다. "
+      "아래는 `v2-nt-r0.5` 와 같은 설정입니다.")
+    w()
+    w("```python")
+    w("import compressors as C")
+    w("")
+    w("C.set_params(force_reserve_digit=True, drop_consecutive=True,")
+    w("             force_tokens=False)          # 조건 이름의 nt 부분")
+    w("C.set_policy(keep_last=2, min_chars=400, skip_system=True)")
+    w("")
+    w("out = C.get('llmlingua')(messages, 0.5)   # 0.5 = rate")
+    w("```")
+    w()
+    w("프록시로 띄우실 때는 같은 설정이 이렇게 됩니다.")
+    w()
+    w("```bash")
+    w("./.venv/bin/python proxy.py --compressor llmlingua --ratio 0.5 \\")
+    w("  --port 8801 --upstream <모델 API> --arm v2-nt-r0.5")
+    w("```")
+    w()
+    if d.get("merged_from"):
+        w("### 합쳐진 측정")
+        w()
+        w("본 측정 뒤에 조건을 더 재서 합쳤습니다.")
+        w()
+        w(md_table(["이름", "시각", "조건 수"],
+                   [[m["name"], m["started_at"], m["arms"]]
+                    for m in d["merged_from"]],
+                   ["left", "left", "right"]))
+        w()
     w("---")
     w()
     w(f"측정 {len(runs)}회 · 소요 {d['elapsed_s'] / 60:.1f}분 · "
@@ -454,7 +765,7 @@ def _read_paths(by_arm: dict, arms: dict, d: dict) -> str:
     ok = {k[0]: v for k, v in by_arm.items() if v}
     if not ok:
         return ""
-    L = ["## 4-1. 파일 경로가 왜 사라지나", ""]
+    L = ["## 5-1. 파일 경로가 왜 사라지나", ""]
     L.append("경로 보존은 다른 지표와 성격이 다릅니다. **부분 점수가 없습니다.** "
              "`builder.py` 가 `builder.` 가 되면 에이전트는 그 파일을 열지 "
              "못하고, 패치는 적용조차 되지 않습니다.")
@@ -497,6 +808,12 @@ def _read_paths(by_arm: dict, arms: dict, d: dict) -> str:
         L.append(md_table(["켬 → 끔", "경로 보존", "숫자 보존", "식별자", "절감"],
                           rows, ["left", "right", "right", "right", "right"]))
         L.append("")
+        md_p, svg_p = chart_pairs(by_arm)
+        if md_p:
+            CHARTS["pairs"] = svg_p
+            L.append("<!--CHART:pairs-->")
+            L.append(md_p)
+            L.append("")
         dp = st.mean(sb["path"] - sa["path"] for _, _, sa, sb in pairs)
         dn = st.mean(sb["num"] - sa["num"] for _, _, sa, sb in pairs)
         di = st.mean(sb["ident"] - sa["ident"] for _, _, sa, sb in pairs)
@@ -657,7 +974,7 @@ def _read_summary(by_arm: dict, by_lang: dict, d: dict) -> str:
             L.append(f"**④ `force_tokens` 를 끄십시오.** 짝지어 비교했을 때 "
                      f"경로 보존이 최대 {big[1] * 100:+.0f}%p 개선됩니다"
                      f"(`{big[0]}`). 절감률도 함께 올라가므로 맞바꿈이 "
-                     f"아닙니다. 4-1 절을 보세요.")
+                     f"아닙니다. 5-1 절을 보세요.")
             L.append("")
 
     # 경로
@@ -708,6 +1025,10 @@ padding:14px 22px;margin:24px 0}
 .toc a{color:var(--accent);text-decoration:none}
 .toc a:hover{text-decoration:underline}
 .n{text-align:right;font-variant-numeric:tabular-nums}
+.chart{width:100%;height:auto;margin:18px 0;background:var(--card);
+border:1px solid var(--line);border-radius:8px;padding:10px}
+.chart .grid{stroke:var(--line);stroke-width:1}
+.chart .ax{fill:var(--dim);font-size:11px}
 """
 
 
@@ -794,6 +1115,8 @@ def build_html(md: str, name: str) -> str:
     toc = [f'<a href="#s{i}">{html.escape(m)}</a>'
            for i, m in enumerate(re.findall(r"^## (.+)$", md, re.M))]
     body = md_to_html(md)
+    for key, svg in CHARTS.items():
+        body = body.replace(f"<p>&lt;!--CHART:{key}--&gt;</p>", svg or "")
     # 목차는 첫 h2 앞에 넣는다
     nav = ('<div class="toc"><strong>목차</strong><br>' +
            " · ".join(toc) + "</div>") if toc else ""

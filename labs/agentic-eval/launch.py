@@ -36,6 +36,10 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 BASE_PORT = 8801
 
+# 컨테이너가 쓸 PyPI 주소. 루트 uv.toml 의 미러를 그대로 쓴다.
+PYPI_INDEX = os.environ.get(
+    "PYPI_INDEX", "https://mirror.kakao.com/pypi/simple")
+
 # ─────────────────────────────────────────────────────────────
 # 벤치마크와 언어 -> 데이터셋 경로
 #
@@ -358,6 +362,13 @@ def build_pier_config(spec: dict, arms: list[dict], public_host: str,
             "env": {
                 "OPENAI_API_KEY": "${OPENAI_API_KEY}",
                 "OPENAI_BASE_URL": base_url,
+                # 컨테이너 안에서 에이전트를 설치할 때 쓸 PyPI 주소.
+                # 사내망은 files.pythonhosted.org 를 막고 있어서, 이걸 넘기지
+                # 않으면 모든 trial 이 설치 단계에서 죽는다. 그 실패는
+                # RuntimeError 로만 보여서 압축 탓으로 오해하기 쉽다.
+                **({"UV_DEFAULT_INDEX": PYPI_INDEX,
+                    "UV_INDEX_URL": PYPI_INDEX,
+                    "PIP_INDEX_URL": PYPI_INDEX} if PYPI_INDEX else {}),
             },
         })
 
