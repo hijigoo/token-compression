@@ -1,10 +1,19 @@
 # 이 랩만 무거운 의존성을 씁니다. 루트 .venv 와 섞이지 않게 격리합니다.
 #
 #   cd labs/04-llmlingua
-#   uv venv .venv && uv pip install --python .venv/bin/python -r requirements.txt
+#   uv venv .venv
+#   uv pip install --python .venv/bin/python -r requirements.txt
 #
-# 모델은 처음 실행할 때 ~/.cache/huggingface/ 로 내려받습니다.
+# 그 다음 VS Code 나 Jupyter 에서 커널을 이 랩의 .venv 로 골라주세요.
+#
+# 모델은 처음 실행할 때 ~/.cache/huggingface/ 로 내려받습니다(저장소 밖).
 #   v2       약 700MB  (다국어 BERT)
 #   v1/long  약 1GB    (Qwen2.5-0.5B)
-llmlingua
+
+llmlingua          # torch·transformers 를 함께 끌어옵니다
+
+# 노트북용. uv 로 만든 환경에는 기본으로 없어서 넣어둡니다.
+# 빠지면 VS Code 가 "requires the ipykernel package" 라고 합니다.
+ipykernel
+
 -r ../kit/requirements.txt

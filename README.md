@@ -206,6 +206,18 @@ python scripts/strip_outputs.py labs/**/run.ipynb
 
 그래도 안 되시면 커널을 재시작해 주세요.
 
+### `requires the ipykernel package`
+
+`uv`로 만든 가상환경에는 `ipykernel`이 기본으로 들어가지 않습니다.
+랩 전용 환경을 쓰는 [`04-llmlingua`](labs/04-llmlingua/)에서 주로 만나십니다.
+
+```bash
+cd labs/04-llmlingua
+uv pip install --python .venv/bin/python ipykernel
+```
+
+설치 후 VS Code에서 **커널을 다시 선택**해 주세요.
+
 ### `jsonl 을 찾지 못했습니다`
 
 코퍼스를 아직 안 만드신 경우입니다.

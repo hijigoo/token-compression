@@ -39,6 +39,20 @@ uv pip install --python .venv/bin/python -r requirements.txt
 .venv/bin/python compress.py configs/v2.yaml --sweep 0.9,0.7,0.5,0.3
 ```
 
+노트북을 여실 때는 **커널을 이 랩의 `.venv`로 골라주세요.** 루트 `.venv`에는
+`llmlingua`가 없어서 첫 셀부터 실패합니다.
+
+> **`requires the ipykernel package` 오류가 나면** — `uv`로 만든 환경에는
+> `ipykernel`이 기본으로 들어가지 않습니다. `requirements.txt`에 넣어두었으니
+> 위 설치 명령을 그대로 쓰시면 됩니다. 이미 환경을 만드셨다면 아래 한 줄로
+> 해결됩니다.
+>
+> ```bash
+> uv pip install --python .venv/bin/python ipykernel
+> ```
+>
+> 설치 후 VS Code에서 **커널을 다시 선택**해 주세요.
+
 **처음 실행은 모델을 내려받습니다** — `v2`는 약 700MB, `v1`/`long`은 약 1GB
 입니다. 받은 모델은 **저장소 밖**인 `~/.cache/huggingface/`에 남고, 다음부터는
 로딩만 합니다.
