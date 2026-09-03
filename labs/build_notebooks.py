@@ -1577,22 +1577,35 @@ def nb_04() -> dict:
         code('\ncases = dataset.load("../data/sample-bilingual")\ncounter = T.make_counter({"mode": "local"}, "gpt-5.4")\n\nko = [c for c in cases if c.meta["lang"] == "ko"]\nen = [c for c in cases if c.meta["lang"] == "en"]\n\ntable(\n    ["언어", "건수", "문자", "토큰", "문자당 토큰"],\n    [[lg, len(xs), f"{sum(len(c.text) for c in xs):,}",\n      f"{sum(counter(c.text) for c in xs):,}",\n      f"{sum(counter(c.text) for c in xs) / sum(len(c.text) for c in xs):.2f}"]\n     for lg, xs in [("한국어", ko), ("영어", en)]],\n    align=["left", "right", "right", "right", "right"],\n    title="이중언어 코퍼스",\n    note="같은 내용인데 한국어가 문자당 토큰을 더 씁니다. 압축이 더 절실한 "\n         "쪽인데, 아래에서 보시면 품질은 더 나쁩니다.",\n)\n\nc = ko[0]\nprint(f"[{c.id}] {c.question}")\nprint(f"  {c.text[:70]}…")\nprint(f"  정답 문자열 {c.must_include}")\n'),
 
         md("""
-## 3. 세 변형이 같은 문장을 어떻게 다루나
+## 3. 세 변형이 같은 문장을 어떻게 다루나 — 한국어와 영어로
 
-한 케이스에 셋을 다 걸어 봅니다. **처음 실행하면 모델 세 개를 받느라
-몇 분 걸립니다.**
+**같은 사실을 담은 한·영 쌍**(`ko-01` / `en-01`)에 셋을 각각 겁니다.
+언어만 다르고 내용·질문·정답 문자열은 같으므로, 차이가 나면 그건 순전히
+언어 때문입니다.
+
+**처음 실행하면 모델 세 개를 받느라 몇 분 걸립니다.**
 """),
-        code('\nprobe = [c for c in cases if c.id == "en-01"][0]\nprint("원문:", probe.text[:100], "…")\nprint()\n\nrows = []\nfor v in ["v1", "long", "v2"]:\n    out, meta = compress(probe.text, question=probe.question, variant=v,\n                         rate=0.5, force_reserve_digit=True)\n    rows.append([v, f"{counter(probe.text)} → {counter(out)}",\n                 pct(1 - counter(out) / counter(probe.text)),\n                 pct(survival(out, probe.must_include)),\n                 out[:52].replace(chr(10), " ")])\n    print(f"  {v} 완료", flush=True)\n\ntable(\n    ["변형", "토큰", "절감", "보존율", "결과 앞부분"],\n    rows,\n    align=["left", "right", "right", "right", "left"],\n    title=f"{probe.id} · 질문: {probe.question}",\n    note="v1/long 은 숫자 중간이 잘립니다. 토큰 단위로 자르기 때문입니다.",\n)\n'),
+        code('# 같은 사실을 담은 한·영 쌍(pair p01)을 나란히 걸어 봅니다.\n# 언어만 다르고 내용·질문·정답 문자열은 같습니다.\nPAIR = ["ko-01", "en-01"]\n\nfor cid in PAIR:\n    probe = [c for c in cases if c.id == cid][0]\n    print(f"[{cid}] {probe.question}")\n    print(f"  원문: {probe.text[:88]}…")\n    print(f"  정답 문자열: {probe.must_include}")\n    print()\n\nrows = []\nfor cid in PAIR:\n    probe = [c for c in cases if c.id == cid][0]\n    for v in ["v1", "long", "v2"]:\n        out, meta = compress(probe.text, question=probe.question, variant=v,\n                             rate=0.5, force_reserve_digit=True)\n        kept = [m for m in probe.must_include\n                if m.replace(",", "") in out.replace(" ", "").replace(",", "")]\n        rows.append([cid, v, f"{counter(probe.text)} → {counter(out)}",\n                     pct(1 - counter(out) / counter(probe.text)),\n                     pct(survival(out, probe.must_include)),\n                     ", ".join(kept) if kept else "(전부 사라짐)"])\n        print(f"  {cid} / {v} 완료", flush=True)\n\ntable(\n    ["케이스", "변형", "토큰", "절감", "보존율", "남은 정답 문자열"],\n    rows,\n    align=["left", "left", "right", "right", "right", "left"],\n    title="같은 내용, 다른 언어 — 세 변형을 각각 걸었을 때",\n    note="같은 변형·같은 rate 인데 언어에 따라 남는 것이 다릅니다.",\n)\n'),
 
         md("""
-`v1` 과 `long` 의 결과를 보시면 `32,450,000` 이 `32,450,00RW` 처럼
-**숫자 중간에서 잘립니다.** 토큰 단위로 버리기 때문입니다.
+표에서 세 가지가 보입니다.
 
-`v2` 가 안전한 이유는 분류 모델이 단어에 가까운 단위로 판정해서 숫자를
-통째로 남기기 때문입니다.
+**① `v1` 은 거의 압축하지 않습니다.** 한국어 0.0%, 영어 1.1% 입니다.
+질문 없이 토큰 정보량만 보는데, 0.5B 모델은 무엇을 버려도 되는지 판단할
+자신이 없어서 대부분 그대로 둡니다. 보존율 100% 는 잘해서가 아니라
+**아무것도 안 버려서** 나온 값입니다.
 
-> 이건 **작은 모델을 써서** 생기는 문제입니다. "LongLLMLingua 가 나쁘다"
-> 가 아니라 "작은 순위 모델로는 못 쓴다" 로 읽어주세요.
+**② `long` 은 많이 버리지만 정답까지 버립니다.** 영어는 56.4% 를 줄이면서
+정답 문자열을 **전부** 잃었습니다. 토큰 단위로 잘라서 `32,450,000` 이
+`32,450,00RW` 처럼 숫자 중간에서 끊깁니다.
+
+**③ `v2` 만 언어에 따라 갈립니다.** 영어는 37.2% 를 줄이고 보존율 100%,
+한국어는 36.2% 를 줄이고 보존율 50% 입니다. 같은 설정인데 한국어에서만
+`32,450,000` 이 사라졌습니다.
+
+> `v1`/`long` 의 문제는 **작은 모델을 써서** 생깁니다. "LongLLMLingua 가
+> 나쁘다" 가 아니라 "작은 순위 모델로는 못 쓴다" 로 읽어주세요.
+> 논문은 7B 를 썼고 여기서는 0.5B 를 씁니다.
 """),
 
         md("""
