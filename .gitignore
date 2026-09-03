@@ -106,8 +106,11 @@ labs/data/**
 # ─────────────────────────────────────────────────────────────
 labs/agentic-eval/datasets/deep-swe/
 # 한국어 데이터셋은 deep-swe/ 를 가리키는 심볼릭 링크 모음이라 그쪽이
-# 없으면 뜻이 없습니다. i18n.py stage 로 언제든 다시 만듭니다.
-# 번역 원본인 i18n/ko/ 는 커밋합니다 — 번역 비용을 다시 치르지 않으려는 것입니다.
+# 없으면 뜻이 없습니다. translate.py stage 로 언제든 다시 만듭니다.
+#
+# 번역 원본인 labs/agentic-eval/translations/ 는 커밋합니다. 다시 만들려면
+# API 비용이 들기 때문입니다. 그래서 datasets/ 밖에 둡니다 — 여기에 두면
+# 나중에 datasets/ 를 통째로 제외할 때 조용히 딸려 나갑니다.
 labs/agentic-eval/datasets/deep-swe-ko/
 
 # 참조 핸들(labs/04)이 원문을 떨궈두는 곳
