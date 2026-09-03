@@ -1989,7 +1989,7 @@ else:
 '''),
 
         md("""
-## 5. 어느 태스크가 실험에 들어가나
+## 5. 어느 태스크가 실험에 들어가나 — 뽑기
 
 여기에 조용한 함정이 있습니다.
 
@@ -2010,6 +2010,8 @@ if not n_ko:
 else:
     pool_en = sorted(x.name for x in EN.iterdir() if x.is_dir())
     pool_ko = sorted(x.name for x in KO.iterdir() if x.is_dir())
+    # 아래 두 값은 **어느 태스크를 뽑을지**만 정합니다. 압축기 설정이
+    # 아닙니다. 압축은 6·7절의 COMPRESSOR·RATIO 가 정합니다.
     SEED, N = 0, 3
 
     # ① 언어별로 따로 뽑으면 — 시드가 같아도 풀이 다르면 결과가 다릅니다
@@ -2022,7 +2024,8 @@ else:
 
     print(f"풀 크기 · 영어 {len(pool_en)}건 · 한국어 {len(pool_ko)}건 "
           f"· 공통 {len(set(pool_en) & set(pool_ko))}건")
-    print(f"설정 · seed={SEED} · n_tasks={N}")
+    print(f"태스크를 뽑는 설정 · seed={SEED} · n_tasks={N}")
+    print("  (압축과는 무관합니다. 어느 문제로 시험할지만 정합니다)")
     print()
     table(
         ["방식", "영어에서 뽑힌 것", "한국어에서 뽑힌 것", "짝이 맞나"],
@@ -2035,7 +2038,7 @@ else:
           ", ".join(x[:22] for x in safe),
           "맞음"]],
         align=["left", "left", "left", "center"],
-        title=f"같은 시드로 뽑아도 — seed={SEED}, n_tasks={N}",
+        title=f"같은 시드로 뽑아도 태스크가 갈립니다 — seed={SEED}, n_tasks={N}",
         note="위 행에서 두 언어가 다른 태스크를 받았다면, 그 결과표는 "
              "언어 비교가 아니라 문제 비교입니다.",
     )
