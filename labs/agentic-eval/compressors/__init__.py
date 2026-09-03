@@ -32,6 +32,7 @@ REGISTRY: dict[str, str | None] = {
     "none": None,  # 대조군 — 아무것도 하지 않음
     "truncate": "compressors.truncate",  # 대조군 — 그냥 뒤를 자른다
     "llmlingua": "compressors.llmlingua",        # v2 — 기본. 분류 모델
+    "llmlingua-small": "compressors.llmlingua_small",  # v2 · 작은 모델
     "llmlingua-v1": "compressors.llmlingua_v1",  # v1 — perplexity (아래 주의)
     "recomp": "compressors.recomp",
 }
@@ -146,6 +147,55 @@ def set_policy(**kw) -> dict:
                        f"(가능: {sorted(POLICY)})")
     POLICY.update({k: v for k, v in kw.items() if v is not None})
     return dict(POLICY)
+
+
+PARAMS = {
+    "force_reserve_digit": True,
+    "drop_consecutive": True,
+    # ⚠️ 기본값이 False 인 이유 — 측정해 보니 **코드를 망가뜨린다.**
+    #
+    # 이름만 보면 "이 문자들을 지킨다" 로 읽히는데, 실제로는 그 문자를 별도
+    # 토큰으로 떼어낸다. 텍스트를 되조립할 때 주변에 공백이 끼어든다.
+    #
+    #     builder.py     →  builder.        ("py" 가 떨어져 나간다)
+    #     32,450,000     →  32, 450, 000
+    #
+    # reports/llmlingua-deepswe 에서 이 옵션 하나로 경로 보존이 0.0% 와
+    # 46.4%, 숫자 보존이 74.9% 와 100.0% 로 갈렸다. 코드 컨텍스트에서는
+    # 켜지 않는 편이 낫다.
+    "force_tokens": False,
+}
+"""압축기에 넘길 옵션. 벤치마크가 하나씩 꺼 보며 기여를 잰다.
+
+POLICY 와 같은 이유로 여기 둔다 — compress(messages, ratio) 계약을 지키면서
+조건을 바꿀 수 있어야 한다.
+
+force_tokens 만 bool 인 것은, 실제 토큰 목록이 압축기마다 달라서다. 켜면
+각 압축기가 자기 목록을 쓰고, 끄면 넘기지 않는다.
+"""
+
+CODE_TOKENS = ["\n", "?", ".", "!", ",", ":", "{", "}", "(", ")"]
+"""코드 구조 문자. 개행과 괄호가 사라지면 모델이 파일 구조를 못 읽는다."""
+
+
+def set_params(**kw) -> dict:
+    unknown = set(kw) - set(PARAMS)
+    if unknown:
+        raise KeyError(f"모르는 압축기 옵션: {sorted(unknown)} "
+                       f"(가능: {sorted(PARAMS)})")
+    PARAMS.update({k: v for k, v in kw.items() if v is not None})
+    return dict(PARAMS)
+
+
+def lingua_kwargs() -> dict:
+    """PARAMS 를 llmlingua 인자로 바꾼다. v1·v2 가 함께 쓴다."""
+    kw = {
+        "force_reserve_digit": PARAMS["force_reserve_digit"],
+        "drop_consecutive": PARAMS["drop_consecutive"],
+    }
+    if PARAMS["force_tokens"]:
+        kw["force_tokens"] = list(CODE_TOKENS)
+    return kw
 
 
 def apply_to_messages(

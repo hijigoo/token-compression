@@ -11,13 +11,13 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from . import apply_to_messages, device
+from . import apply_to_messages, device, lingua_kwargs
 
 MODEL = "microsoft/llmlingua-2-xlm-roberta-large-meetingbank"
 
 
-@lru_cache(maxsize=1)
-def _compressor():
+@lru_cache(maxsize=3)
+def _make(model: str = MODEL):
     try:
         from llmlingua import PromptCompressor
     except ImportError as e:  # pragma: no cover
@@ -27,26 +27,21 @@ def _compressor():
         ) from e
 
     # 모델 로딩은 수 초~수십 초 걸린다. 프록시 기동 시 1회만 수행한다.
-    return PromptCompressor(model_name=MODEL, use_llmlingua2=True,
+    return PromptCompressor(model_name=model, use_llmlingua2=True,
                             device_map=device())
 
 
-def compress(messages: list[dict], ratio: float) -> list[dict]:
-    comp = _compressor()
-
+def _compress_fn(comp, ratio: float):
+    """텍스트 하나를 압축하는 함수를 만듭니다. 모델을 공유하려고 나눴습니다."""
     def _fn(text: str) -> str:
-        # rate 는 유지 비율. force_tokens 로 코드 구조 문자를 보존한다 —
-        # 에이전트 컨텍스트는 대부분 파일 내용과 셸 출력이라
-        # 개행/괄호가 사라지면 모델이 파일 구조를 못 읽는다.
         result = comp.compress_prompt(
-            text,
+            [text],          # v1 은 목록을 받는다. v2 도 목록으로 통일한다
             rate=ratio,
-            # 숫자가 토큰 경계에서 잘리는 것을 막는다. 기본값이 False 라
-            # 명시하지 않으면 32,450,000 같은 값이 조용히 망가진다.
-            force_reserve_digit=True,
-            force_tokens=["\n", "?", ".", "!", ",", ":", "{", "}", "(", ")"],
-            drop_consecutive=True,
+            **lingua_kwargs(),
         )
         return result["compressed_prompt"]
+    return _fn
 
-    return apply_to_messages(messages, _fn)
+
+def compress(messages: list[dict], ratio: float) -> list[dict]:
+    return apply_to_messages(messages, _compress_fn(_make(MODEL), ratio))

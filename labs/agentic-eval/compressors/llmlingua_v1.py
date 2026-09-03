@@ -34,7 +34,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from . import apply_to_messages, device
+from . import apply_to_messages, device, lingua_kwargs
 
 MODEL = "Qwen/Qwen2.5-1.5B"
 """랩 04 의 large 티어와 같은 모델.
@@ -96,15 +96,9 @@ def compress(messages: list[dict], ratio: float) -> list[dict]:
 
     def _fn(text: str) -> str:
         result = comp.compress_prompt(
-            text,
+            [text],          # v1 은 목록을 받는다. v2 도 목록으로 통일한다
             rate=ratio,
-            # 숫자가 토큰 경계에서 잘리는 것을 막습니다. 기본값은 False 라
-            # 명시하지 않으면 금액·크기 같은 값이 조용히 망가집니다.
-            force_reserve_digit=True,
-            # 코드 구조 문자입니다. 개행과 괄호가 사라지면 모델이 파일
-            # 구조를 못 읽습니다.
-            force_tokens=["\n", "?", ".", "!", ",", ":", "{", "}", "(", ")"],
-            drop_consecutive=True,
+            **lingua_kwargs(),
         )
         return result["compressed_prompt"]
 

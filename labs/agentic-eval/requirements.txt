@@ -22,6 +22,14 @@ datacurve-pier @ git+https://github.com/datacurve-ai/pier
 # "requires the ipykernel package" 라고 합니다.
 ipykernel
 
+# ── 압축기 (벤치마크에 필요) ──────────────────────────────────
+# transformers 를 4.x 로 고정합니다. 5.x 에서는 LLMLingua v1 이 긴 입력에서
+# 깨집니다 — past_key_values 형식이 바뀌었는데 llmlingua 0.2.2 는 예전
+# 튜플을 가정합니다. llmlingua 는 상한을 선언하지 않아 그냥 두면 5.x 가
+# 딸려옵니다.
+llmlingua
+transformers>=4.44,<5
+
 # ── 압축기 ────────────────────────────────────────────────────
 # proxy.py 와 compressors/none·truncate 는 표준 라이브러리만 씁니다.
 # 사내망처럼 설치가 어려운 곳에서도 파이프라인 전체가 돌아가야 해서입니다.
