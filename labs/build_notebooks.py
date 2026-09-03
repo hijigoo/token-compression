@@ -1800,13 +1800,31 @@ def nb_eval() -> dict:
 import json
 import subprocess
 
+# ══════════════════════════════════════════════════════════════
+# 이 노트북의 설정 — 바꾸실 것은 여기뿐입니다
+# ══════════════════════════════════════════════════════════════
+BENCHMARK  = "deep-swe"
+
+# 태스크 하나만 씁니다. 113건 중 지시문이 가장 짧아(571자) 가장 빨리 끝납니다.
+TASK       = "mashumaro-flattened-dataclass-fields"
+
+# 6·7절에서 쓸 압축기입니다. truncate 는 그냥 뒤를 자르는 대조군이라
+# 라이브러리 설치 없이 돕니다. llmlingua 로 바꾸시면 그 랩과 같은 모델을
+# 내려받습니다(수 분).
+COMPRESSOR = "truncate"          # none | truncate | llmlingua | recomp
+RATIO      = 0.5                 # 유지 비율. 0.5 면 절반을 남깁니다
+
+# 8절에서 설정을 생성해 볼 실험 파일입니다.
+EXPERIMENT = "smoke"             # experiments/<이름>.yaml
+# ══════════════════════════════════════════════════════════════
+
 LAB = Path.cwd().resolve()
 DATASETS = LAB / "datasets"
 
 # 이 랩은 데이터셋이 저장소 밖에서 오므로, 없을 때 조용히 진행하면
 # 뒤에서 엉뚱한 에러가 납니다. 여기서 먼저 확인합니다.
-EN = DATASETS / "deep-swe" / "tasks"
-KO = DATASETS / "deep-swe-ko" / "tasks"
+EN = DATASETS / BENCHMARK / "tasks"
+KO = DATASETS / f"{BENCHMARK}-ko" / "tasks"
 
 def _count(p):
     return len([x for x in p.iterdir() if x.is_dir()]) if p.is_dir() else 0
@@ -1814,10 +1832,12 @@ def _count(p):
 n_en, n_ko = _count(EN), _count(KO)
 table(
     ["무엇", "어디", "몇 건"],
-    [["영어 원본", "datasets/deep-swe/tasks", n_en or "없음"],
-     ["한국어판", "datasets/deep-swe-ko/tasks", n_ko or "없음"]],
+    [["영어 원본", f"datasets/{BENCHMARK}/tasks", n_en or "없음"],
+     ["한국어판", f"datasets/{BENCHMARK}-ko/tasks", n_ko or "없음"]],
     align=["left", "left", "right"],
-    title="데이터 준비 상태",
+    title=f"데이터 준비 상태 — {BENCHMARK}",
+    note=f"설정 · 태스크 {TASK} · 압축기 {COMPRESSOR} · ratio {RATIO} "
+         f"· 실험 {EXPERIMENT}",
 )
 
 if not n_en:
@@ -1841,9 +1861,6 @@ DeepSWE 태스크는 텍스트 한 덩어리가 아니라 **폴더**입니다. �
 문자열" 과 무엇이 다른지 보시면 됩니다.
 """),
         code('''
-# 가장 가벼운 태스크입니다. 지시문이 113건 중 가장 짧아(571자) 빨리 끝납니다.
-TASK = "mashumaro-flattened-dataclass-fields"
-
 task_dir = EN / TASK
 print(f"태스크: {TASK}")
 print()
@@ -1941,7 +1958,7 @@ if not n_ko:
     print("한국어판이 없어 이 절은 건너뜁니다.")
 else:
     import translate as TR
-    TR.set_benchmark("deep-swe")
+    TR.set_benchmark(BENCHMARK)
 
     ko_text = (KO / TASK / "instruction.md").read_text(encoding="utf-8")
     print("한국어 지시문")
@@ -2001,7 +2018,7 @@ else:
 
     # ② launch.py 방식 — 공통 태스크만 추린 뒤 뽑습니다
     import launch as L
-    safe = L.pick_tasks("deep-swe", ["en", "ko"], N, SEED)
+    safe = L.pick_tasks(BENCHMARK, ["en", "ko"], N, SEED)
 
     print(f"풀 크기 · 영어 {len(pool_en)}건 · 한국어 {len(pool_ko)}건 "
           f"· 공통 {len(set(pool_en) & set(pool_ko))}건")
@@ -2047,10 +2064,7 @@ else:
         code('''
 import compressors
 
-# ── 이 셀의 설정 ──────────────────────────────────────────────
-RATIO = 0.5          # 유지 비율. 0.5 면 절반만 남깁니다
-COMPRESSOR = "truncate"
-
+# 설정은 맨 위 셀에 있습니다 — COMPRESSOR, RATIO
 convo = [
     {"role": "system", "content":
      "You are a coding agent. Respond with exactly one bash command in a "
@@ -2069,13 +2083,24 @@ out = fn(convo, RATIO)
 rows = []
 for i, (a, b) in enumerate(zip(convo, out)):
     before, after = len(a["content"]), len(b["content"])
-    if before == after:
-        why = ("system 이라 보호" if a["role"] == "system"
-               else "마지막 2개라 보호" if i >= len(convo) - compressors.KEEP_LAST
-               else f"{compressors.MIN_CHARS}자 미만이라 대상 아님")
-        verdict = "그대로"
+
+    # 이유는 **규칙에서** 냅니다. 결과(before == after)로 되짚으면 압축기가
+    # 아무것도 안 하는 none 일 때 엉뚱한 이유가 붙습니다.
+    if a["role"] == "system":
+        why = "system 이라 보호"
+    elif i >= len(convo) - compressors.KEEP_LAST:
+        why = f"마지막 {compressors.KEEP_LAST}개라 보호"
+    elif before < compressors.MIN_CHARS:
+        why = f"{compressors.MIN_CHARS}자 미만이라 대상 아님"
     else:
-        why, verdict = "압축 대상", f"{1 - after / before:.0%} 줄임"
+        why = "압축 대상"
+
+    if after != before:
+        verdict = f"{1 - after / before:.0%} 줄임"
+    elif why == "압축 대상":
+        verdict = f"안 줄임 ({COMPRESSOR})"
+    else:
+        verdict = "그대로"
     rows.append([i, a["role"], f"{before:,}", f"{after:,}", verdict, why])
 
 table(
@@ -2114,10 +2139,6 @@ import socket
 import threading
 import time
 import urllib.request
-
-# ── 이 셀의 설정 ──────────────────────────────────────────────
-RATIO = 0.5
-COMPRESSOR = "truncate"
 
 received = {}          # 가짜 upstream 이 받은 것을 여기 담습니다
 
@@ -2211,8 +2232,6 @@ else:
 보기에 좋습니다.
 """),
         code('''
-EXPERIMENT = "smoke"        # 태스크 1개 · 시도 1회짜리 확인용 실험
-
 print(f"experiments/{EXPERIMENT}.yaml")
 print("─" * 70)
 print((LAB / "experiments" / f"{EXPERIMENT}.yaml").read_text(encoding="utf-8"))
