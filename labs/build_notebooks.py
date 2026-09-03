@@ -1544,6 +1544,31 @@ def nb_04() -> dict:
         code(BOOTSTRAP + '\nimport lingua as L\nfrom compress import compress\nfrom kit.metrics import survival\n\ntable(\n    ["변형", "무엇이 다른가", "필요한 것"],\n    [["v1", "토큰별 정보량으로 프루닝", "인과 LM"],\n     ["long", "질문을 주고 문단별 중요도를 함께 봄", "인과 LM + 질문"],\n     ["v2", "분류 모델이 토큰을 남길지 판정", "전용 인코더"]],\n    align=["left", "left", "left"],\n    title="LLMLingua 3형제 — 같은 클래스, 다른 파라미터",\n    note="논문은 v1/long 에 7B 를 썼습니다. 여기서는 0.5B 를 쓰므로 "\n         "그만큼 결과가 나쁩니다. 아래에서 그 영향을 직접 봅니다.",\n)\nfor k, v in L.DEFAULT_MODEL.items():\n    print(f"  {k:5s} {v}")\n'),
 
         md("""
+## 지표 두 가지 — 표를 읽기 전에
+
+| 이름 | 무엇을 재나 |
+|---|---|
+| **절감** | 토큰이 얼마나 줄었나 |
+| **보존율** | 답에 꼭 필요한 문자열(`must_include`)이 압축 후에도 남은 비율 |
+
+보존율 예시입니다.
+
+```
+질문        3월 결제 총액과 환불액은?
+필요한 것    ["32,450,000", "1,280,500"]   ← 2개
+
+압축 후 2개 다 남음  → 100%
+1개만 남음          →  50%
+```
+
+아래 표에서 **`전체` · `한국어` · `영어` 는 전부 같은 보존율**입니다.
+전체는 12건 평균이고, 나머지는 그중 해당 언어만 골라 낸 평균입니다.
+
+> 지금은 한·영이 6건씩 같아서 전체가 두 언어의 가운데값과 일치합니다.
+> **건수가 달라지면 많은 쪽으로 기웁니다.** 한국어 서비스에 쓰실 거라면
+> 전체가 아니라 **한국어 열**을 기준으로 보세요.
+"""),
+        md("""
 ## 2. 코퍼스 — 같은 사실을 한국어와 영어로
 
 번역이 아니라 **같은 사실을 담은 쌍**입니다. `pair_id` 로 묶여 있어
@@ -1591,10 +1616,10 @@ def nb_04() -> dict:
 
 `v2-noop` 이 중요합니다. 아무것도 안 버리는 설정인데 **토큰이 늘어납니다.**
 """),
-        code('\ndef run_config(path):\n    cfg = C.load(path)\n    cs = dataset.load(cfg.dataset["path"], limit=cfg.dataset.get("limit"))\n    cnt = T.make_counter({"mode": "local"}, cfg.model)\n    params = dict(cfg.params)\n    variant = params.pop("variant", "v2")\n    params.pop("model_name", None)\n\n    run = Run(cfg, RUNS)\n    for x in cs:\n        after, extra = compress(x.text, question=x.question or "",\n                                variant=variant, **params)\n        extra["lang"] = x.meta.get("lang", "-")\n        run.add(metrics.per_case(x.id, x.kind, x.text, after,\n                                 x.must_include, cnt, extra),\n                before=x.text, after=after)\n\n    m = metrics.aggregate(run.records, cnt)\n    m["variant"] = variant\n    m["rate"] = params.get("rate")\n    for lg in ("ko", "en"):\n        xs = [r for r in run.records if r["lang"] == lg]\n        if xs:\n            m[f"surv_{lg}"] = sum(r["survival"] for r in xs) / len(xs)\n    return cfg, m, run.finish(m, [f"변형 {variant}"])\n\n\nresults = []\nfor p in sorted(Path("configs").glob("*.yaml")):\n    cfg, m, out = run_config(p)\n    results.append((cfg.name, m, out))\n    print(f\'{cfg.name:10s} rate={m["rate"]} · 절감 {m["saved"]:6.1%} · \'\n          f\'보존 {m["survival_mean"]:6.1%}\', flush=True)\n'),
+        code('\ndef run_config(path):\n    cfg = C.load(path)\n    cs = dataset.load(cfg.dataset["path"], limit=cfg.dataset.get("limit"))\n    cnt = T.make_counter({"mode": "local"}, cfg.model)\n    params = dict(cfg.params)\n    variant = params.pop("variant", "v2")\n    params.pop("model_name", None)\n\n    run = Run(cfg, RUNS)\n    for x in cs:\n        after, extra = compress(x.text, question=x.question or "",\n                                variant=variant, **params)\n        extra["lang"] = x.meta.get("lang", "-")\n        run.add(metrics.per_case(x.id, x.kind, x.text, after,\n                                 x.must_include, cnt, extra),\n                before=x.text, after=after)\n\n    m = metrics.aggregate(run.records, cnt)\n    m["variant"] = variant\n    m["config"] = cfg.name\n    m["rate"] = params.get("rate")\n    for lg in ("ko", "en"):\n        xs = [r for r in run.records if r["lang"] == lg]\n        if xs:\n            m[f"surv_{lg}"] = sum(r["survival"] for r in xs) / len(xs)\n    return cfg, m, run.finish(m, [f"변형 {variant}"])\n\n\nresults = []\nfor p in sorted(Path("configs").glob("*.yaml")):\n    cfg, m, out = run_config(p)\n    results.append((cfg.name, m, out))\n    print(f\'{cfg.name:10s} rate={m["rate"]} · 절감 {m["saved"]:6.1%} · \'\n          f\'보존 {m["survival_mean"]:6.1%}\', flush=True)\n'),
 
         md(COMPARE_MD.format(n=6)),
-        code('\ntable(\n    ["설정", "변형", "rate", "절감", "보존율", "한국어", "영어"],\n    [[n, m["variant"], m["rate"], pct(m["saved"]), pct(m["survival_mean"]),\n      pct(m.get("surv_ko")), pct(m.get("surv_en"))]\n     for n, m, _ in results],\n    align=["left", "left", "right", "right", "right", "right", "right"],\n    title="조건 비교",\n    note="같은 설정인데 언어별로 다릅니다. 그게 이 랩의 핵심입니다.",\n)\n\nby = {n: m for n, m, _ in results}\nif "v2-noop" in by:\n    m = by["v2-noop"]\n    print(f\'v2-noop: rate=1.0 인데 절감 {m["saved"]:.1%} · \'\n          f\'보존율 {m["survival_mean"]:.1%}\')\n    print("아무것도 안 버렸는데 토큰이 늘었습니다. 토큰에서 텍스트를 다시")\n    print("만들면서 \'32,450,000\' 이 \'32, 450, 000\' 처럼 벌어지기 때문입니다.")\nif "v2" in by and "long" in by:\n    print()\n    print(f\'v2 보존 {by["v2"]["survival_mean"]:.1%} vs \'\n          f\'long 보존 {by["long"]["survival_mean"]:.1%} — \'\n          f\'질문을 주는 long 이 오히려 나쁩니다.\')\n    print("작은 모델로 토큰 단위 프루닝을 하면 숫자가 조각나기 때문입니다.")\n'),
+        code('\nn_ko = len([c for c in cases if c.meta["lang"] == "ko"])\nn_en = len([c for c in cases if c.meta["lang"] == "en"])\n\n# 뒤의 세 열은 같은 보존율을 언어별로 나눈 것입니다. 열 이름에 건수를 적어\n# "전체가 두 언어의 단순평균인가?" 라는 오해를 줄입니다.\nrows = []\nfor n, m, _ in results:\n    ko, en = m.get("surv_ko"), m.get("surv_en")\n    gap = (en - ko) if (ko is not None and en is not None) else None\n    rows.append([n, m["variant"], m["rate"], pct(m["saved"]),\n                 pct(m["survival_mean"]), pct(ko), pct(en),\n                 "—" if gap is None else f"{gap * 100:+.1f}%p"])\n\ntable(\n    ["설정", "변형", "rate", "절감",\n     f"보존율 전체({len(cases)}건)", f"한국어({n_ko}건)", f"영어({n_en}건)",\n     "영−한 격차"],\n    rows,\n    align=["left", "left", "right", "right", "right", "right", "right", "right"],\n    title="조건 비교 — 뒤의 세 열은 같은 보존율을 언어별로 쪼갠 것입니다",\n    note=f"\'전체\' 는 {len(cases)}건 전부의 평균입니다. 지금은 한·영이 {n_ko}건씩 "\n         f"같아서 두 언어 평균의 가운데값과 일치하지만, 건수가 달라지면 "\n         f"많은 쪽으로 기웁니다.",\n)\n\nreal = [m for _, m, _ in results if m.get("rate") != 1.0]\nif real:\n    w = max(real, key=lambda m: (m.get("surv_en") or 0) - (m.get("surv_ko") or 0))\n    print(f"격차가 가장 큰 조건은 {w[\'config\']} 입니다.")\n    print(f"  전체 {w[\'survival_mean\']:.1%} 로는 무난해 보이지만 "\n          f"한국어만 보면 {w[\'surv_ko\']:.1%} 입니다.")\n    print("한국어 서비스에 쓰신다면 \'전체\' 가 아니라 \'한국어\' 열을 보세요.")\n\nby = {n: m for n, m, _ in results}\nif "v2-noop" in by:\n    m = by["v2-noop"]\n    print(f\'v2-noop: rate=1.0 인데 절감 {m["saved"]:.1%} · \'\n          f\'보존율 {m["survival_mean"]:.1%}\')\n    print("아무것도 안 버렸는데 토큰이 늘었습니다. 토큰에서 텍스트를 다시")\n    print("만들면서 \'32,450,000\' 이 \'32, 450, 000\' 처럼 벌어지기 때문입니다.")\nif "v2" in by and "long" in by:\n    print()\n    print(f\'v2 보존 {by["v2"]["survival_mean"]:.1%} vs \'\n          f\'long 보존 {by["long"]["survival_mean"]:.1%} — \'\n          f\'질문을 주는 long 이 오히려 나쁩니다.\')\n    print("작은 모델로 토큰 단위 프루닝을 하면 숫자가 조각나기 때문입니다.")\n'),
 
         md("""
 ## 7. 압축률 스윕 — 어디서 무너지나
@@ -1602,7 +1627,7 @@ def nb_04() -> dict:
 `rate` 는 **남길 비율**입니다. 낮출수록 많이 버립니다.
 언어별로 무너지는 지점이 다른지 봅니다.
 """),
-        code('\nrows = []\nfor rate in [0.9, 0.7, 0.5, 0.3]:\n    recs = []\n    for x in cases:\n        out, meta = compress(x.text, variant="v2", rate=rate,\n                             force_reserve_digit=True)\n        recs.append({"lang": x.meta["lang"],\n                     "s": survival(out, x.must_include),\n                     "tb": counter(x.text), "ta": counter(out)})\n    tb = sum(r["tb"] for r in recs)\n    ta = sum(r["ta"] for r in recs)\n    g = {lg: [r["s"] for r in recs if r["lang"] == lg] for lg in ("ko", "en")}\n    rows.append([rate, pct(1 - ta / tb),\n                 pct(sum(r["s"] for r in recs) / len(recs)),\n                 pct(min(r["s"] for r in recs)),\n                 pct(sum(g["ko"]) / len(g["ko"])),\n                 pct(sum(g["en"]) / len(g["en"]))])\n    print(f"  rate={rate} 완료", flush=True)\n\ntable(\n    ["rate", "절감", "보존 평균", "보존 최저", "한국어", "영어"],\n    rows,\n    align=["right"] * 6,\n    title="압축률 스윕 (v2)",\n    note="rate 0.7 을 보세요. 영어는 아직 멀쩡한데 한국어는 이미 무너집니다.",\n)\n'),
+        code('\nrows = []\nfor rate in [0.9, 0.7, 0.5, 0.3]:\n    recs = []\n    for x in cases:\n        out, meta = compress(x.text, variant="v2", rate=rate,\n                             force_reserve_digit=True)\n        recs.append({"lang": x.meta["lang"],\n                     "s": survival(out, x.must_include),\n                     "tb": counter(x.text), "ta": counter(out)})\n    tb = sum(r["tb"] for r in recs)\n    ta = sum(r["ta"] for r in recs)\n    g = {lg: [r["s"] for r in recs if r["lang"] == lg] for lg in ("ko", "en")}\n    rows.append([rate, pct(1 - ta / tb),\n                 pct(sum(r["s"] for r in recs) / len(recs)),\n                 pct(min(r["s"] for r in recs)),\n                 pct(sum(g["ko"]) / len(g["ko"])),\n                 pct(sum(g["en"]) / len(g["en"]))])\n    print(f"  rate={rate} 완료", flush=True)\n\ntable(\n    ["rate", "절감", f"보존 전체({len(cases)}건)", "보존 최저",\n     f"한국어({n_ko}건)", f"영어({n_en}건)"],\n    rows,\n    align=["right"] * 6,\n    title="압축률 스윕 (v2) — 언어별로 무너지는 지점이 다릅니다",\n    note="rate 0.7 을 보세요. 영어는 아직 멀쩡한데 한국어는 이미 무너집니다. "\n         "\'전체\' 는 12건 평균이라 이 격차를 가립니다.",\n)\n'),
 
         md("""
 ## 정리
