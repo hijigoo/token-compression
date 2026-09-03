@@ -16,17 +16,24 @@ DeepSWE 태스크를 실제로 풀게 해서 **pass@1**을 봅니다. 느리고 
 ## 폴더 구성
 
 ```
-setup.sh          deep-swe 클론 + pier 설치
-deep-swe/         데이터셋 (커밋 제외). 코퍼스가 아니라 Docker 픽스처라 여기 둡니다
-deep-swe-ko/      한국어판 데이터셋 (커밋 제외). translate.py stage 가 만듭니다
-translate.py           지시문 한국어 번역 + 검증 + 스테이징
-translations/ko/          번역 결과 (커밋). 번역 비용을 다시 치르지 않으려고 남깁니다
+setup.sh          데이터셋 클론 + pier 설치
+datasets/         벤치마크 데이터 (커밋 제외). 코퍼스가 아니라 Docker 픽스처입니다
+  deep-swe/         영어 원본 — setup.sh 가 클론합니다
+  deep-swe-ko/      한국어판 — translate.py stage 가 만듭니다
+translate.py      지시문 번역 + 검증 + 스테이징
+translations/     번역 결과 (커밋). 번역 비용을 다시 치르지 않으려고 남깁니다
+  deep-swe/ko/
 proxy.py          OpenAI 호환 압축 프록시 (표준 라이브러리만 씁니다)
 compressors/      라이브러리 하나가 파일 하나입니다
 experiments/      질문 하나가 파일 하나이자 pier 실행 한 번입니다
 launch.py         arm 기동 + 포트 배정 + pier 설정 생성
 analyze.py        reward 와 토큰 집계
 ```
+
+`datasets/` 와 `translations/` 가 나뉘어 있는 이유가 있습니다. `datasets/` 는
+다시 받으면 그만이지만, 번역은 API 호출 비용이 듭니다. 그래서 번역만
+커밋하고, 둘을 합친 `datasets/deep-swe-ko/` 는 `stage` 로 언제든 다시
+만듭니다.
 
 ## 용어 — arm
 
@@ -53,11 +60,14 @@ DeepSWE 의 `instruction.md` 는 전부 영어입니다. 한국어에서도 압�
 효과를 내는지 보려면 한국어판이 있어야 합니다. **채점은 테스트 코드가
 하므로 지시문만 번역하면 됩니다.**
 
+다른 벤치마크를 붙이시면 `-b` 로 고르실 수 있습니다. 기본은 `deep-swe`
+입니다.
+
 ```bash
 python translate.py list                      # 상태 보기
 python translate.py translate <태스크>…        # 영어 → 한국어 (--all 로 전체)
 python translate.py verify                    # 식별자가 살아남았는지 검사
-python translate.py stage                     # deep-swe-ko/tasks/ 생성
+python translate.py stage                     # datasets/deep-swe-ko/ 생성
 ```
 
 `stage` 는 `instruction.md` 만 한국어로 바꾸고 나머지(Dockerfile·테스트·정답
@@ -68,7 +78,7 @@ python translate.py stage                     # deep-swe-ko/tasks/ 생성
 
 ```yaml
 dataset:
-  path: ./deep-swe-ko/tasks
+  path: ./datasets/deep-swe-ko/tasks
 ```
 
 ### verify 를 건너뛰지 마세요
@@ -127,7 +137,7 @@ pier run --config runs/agentic-eval/ratio-sweep/<시각>/pier.yaml
 ```yaml
 name: my-experiment
 model: openai/gpt-5.5
-dataset: {path: ./deep-swe/tasks, n_tasks: 5, sample_seed: 0}
+dataset: {path: ./datasets/deep-swe/tasks, n_tasks: 5, sample_seed: 0}
 n_attempts: 3
 arms:
   - {name: baseline, kind: direct}                            # 압축 없음

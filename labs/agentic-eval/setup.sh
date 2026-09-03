@@ -27,15 +27,16 @@ log "docker 확인됨"
 
 # ── 2. 데이터셋 ──────────────────────────────────────────────
 # 코퍼스가 아니라 Docker 실행 픽스처라 labs/data/ 가 아니라 여기 둔다.
-if [[ -d deep-swe/.git ]]; then
+if [[ -d datasets/deep-swe/.git ]]; then
   log "deep-swe — 이미 있음 (skip)"
 else
   log "deep-swe 클론 중…"
-  git clone --depth 1 "$DEEPSWE_REPO" deep-swe
+  mkdir -p datasets
+  git clone --depth 1 "$DEEPSWE_REPO" datasets/deep-swe
 fi
 
-n_tasks=$(find deep-swe/tasks -maxdepth 1 -mindepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
-[[ "$n_tasks" -gt 0 ]] || die "deep-swe/tasks 가 비어 있습니다"
+n_tasks=$(find datasets/deep-swe/tasks -maxdepth 1 -mindepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
+[[ "$n_tasks" -gt 0 ]] || die "datasets/deep-swe/tasks 가 비어 있습니다"
 log "태스크 ${n_tasks}개"
 
 # ── 3. 랩 전용 venv ──────────────────────────────────────────

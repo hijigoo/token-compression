@@ -36,9 +36,28 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
-TASKS_EN = HERE / "deep-swe" / "tasks"
-KO_DIR = HERE / "translations" / "ko"
-STAGE_KO = HERE / "deep-swe-ko" / "tasks"
+DATASETS = HERE / "datasets"
+TRANSLATIONS = HERE / "translations"
+
+# 벤치마크마다 원본 태스크가 어디 있는지 다르다. Terminal Bench 를 붙일 때
+# 여기 한 줄만 늘리면 된다.
+BENCHMARKS = {
+    "deep-swe": "tasks",          # datasets/deep-swe/tasks/<태스크>/
+}
+
+# 명령별로 아래 세 경로를 쓴다. main() 이 --benchmark 를 읽어 채운다.
+TASKS_EN: Path
+KO_DIR: Path
+STAGE_KO: Path
+
+
+def set_benchmark(name: str) -> None:
+    global TASKS_EN, KO_DIR, STAGE_KO
+    if name not in BENCHMARKS:
+        die(f"모르는 벤치마크: {name!r} (가능: {', '.join(BENCHMARKS)})")
+    TASKS_EN = DATASETS / name / BENCHMARKS[name]
+    KO_DIR = TRANSLATIONS / name / "ko"
+    STAGE_KO = DATASETS / f"{name}-ko" / BENCHMARKS[name]
 
 sys.path.insert(0, str(REPO / "labs"))
 
@@ -332,7 +351,13 @@ def main() -> int:
     s.add_argument("--all", action="store_true")
     s.set_defaults(fn=cmd_stage)
 
+    for sp in sub.choices.values():
+        sp.add_argument("-b", "--benchmark", default="deep-swe",
+                        choices=sorted(BENCHMARKS),
+                        help="대상 벤치마크 (기본 deep-swe)")
+
     args = p.parse_args()
+    set_benchmark(args.benchmark)
     return args.fn(args)
 
 
