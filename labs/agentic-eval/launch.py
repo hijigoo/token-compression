@@ -112,11 +112,12 @@ def validate(spec: dict) -> None:
             "    benchmark: deep-swe\n"
             "    langs: [en, ko]")
     if "tasks" in ds:
-        if not ds["tasks"]:
-            die("dataset.tasks 가 비어 있습니다")
+        if not isinstance(ds["tasks"], list):
+            die("dataset.tasks 는 목록이어야 합니다")
         if "n_tasks" in ds or "sample_seed" in ds:
             die("dataset.tasks 를 주셨으면 n_tasks·sample_seed 는 쓰지 않습니다.\n"
-                "  목록을 직접 지정하는 것이므로 뽑을 것이 없습니다.")
+                "  목록으로 정하는 것이므로 뽑을 것이 없습니다.\n"
+                "  전부 쓰시려면 tasks: [] 로 비워 두세요.")
     elif "sample_seed" not in ds:
         # 시드가 없으면 arm 마다 다른 태스크를 받아 비교 자체가 무의미해진다.
         die("dataset.sample_seed 가 없습니다. 시드가 없으면 arm 간 비교가 성립하지 않습니다.")
@@ -184,6 +185,9 @@ def pick_tasks(benchmark: str, langs: list[str],
         die("모든 언어에 공통으로 있는 태스크가 없습니다.")
 
     if explicit is not None:
+        if not explicit:
+            # 빈 목록은 "고르지 않겠다" 는 뜻이다. 공통인 것을 전부 쓴다.
+            return sorted(shared)
         missing = [t for t in explicit if t not in shared]
         if missing:
             die(f"모든 언어에 있지는 않은 태스크: {missing}\n"
@@ -379,7 +383,7 @@ def main() -> int:
         benchmark, langs,
         int(ds["n_tasks"]) if "n_tasks" in ds else None,
         int(ds["sample_seed"]) if "sample_seed" in ds else None,
-        explicit=ds.get("tasks"))
+        explicit=ds["tasks"] if "tasks" in ds else None)
 
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     out_dir = REPO / "runs" / "agentic-eval" / benchmark / spec["name"] / stamp
@@ -435,7 +439,8 @@ def main() -> int:
             "agent": spec.get("agent", "mini-swe-agent"),
             "n_attempts": spec.get("n_attempts", 3),
             "sample_seed": ds.get("sample_seed"),
-            "task_source": "명시" if ds.get("tasks") else "시드 추출",
+            "task_source": ("전체" if ds.get("tasks") == [] else
+                            "명시" if "tasks" in ds else "시드 추출"),
             "tasks": tasks,
             "started_at": stamp,
         }, ensure_ascii=False, indent=2), encoding="utf-8")

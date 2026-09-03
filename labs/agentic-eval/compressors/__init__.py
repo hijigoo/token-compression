@@ -30,6 +30,7 @@ class Compressor(Protocol):
 # 이름 -> 모듈 경로. 무거운 의존성(torch 등)을 피하려고 지연 import 한다.
 REGISTRY: dict[str, str | None] = {
     "none": None,  # 대조군 — 아무것도 하지 않음
+    "truncate": "compressors.truncate",  # 대조군 — 그냥 뒤를 자른다
     "llmlingua": "compressors.llmlingua",
     "recomp": "compressors.recomp",
 }

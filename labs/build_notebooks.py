@@ -1765,11 +1765,603 @@ def nb_04() -> dict:
     ])
 
 
+def nb_eval() -> dict:
+    """agentic-eval — 파이프라인을 한 단계씩 눈으로 확인하는 노트북."""
+    return notebook([
+        md("""
+# 종단 평가 파이프라인 — 한 태스크로 따라가 보기
+
+앞의 랩 00~04 는 **대리 지표**를 봤습니다. 압축한 뒤에도 정답 문자열이
+남아 있는지(보존율)를 셌습니다. 값싸고 빠르지만, 그게 실제로 **일을
+끝내는 능력**과 같은지는 확인하지 않았습니다.
+
+이 랩은 그걸 확인합니다. DeepSWE 태스크를 에이전트에게 실제로 풀게 하고
+테스트를 돌려 통과 여부(pass@1)를 봅니다.
+
+## 이 노트북이 하는 일
+
+**결과를 내는 노트북이 아닙니다.** 파이프라인이 어떻게 생겼는지 한
+단계씩 보여드립니다. 태스크 하나만 씁니다.
+
+| | 필요한 것 |
+|---|---|
+| 1~6절 · 데이터와 압축 규칙 | 없음 |
+| 7절 · 프록시 왕복 | 없음 (가짜 서버를 띄웁니다) |
+| 8절 · 설정 생성 | 없음 (`--dry-run`) |
+| 9절 · 실제 실행 | **Docker · pier · 모델 API** |
+
+8절까지는 아무것도 설치하지 않고 돌아갑니다. 실제 실행은 태스크 하나에
+최대 3시간이 걸리므로 명령만 안내합니다.
+
+> **먼저 준비하실 것** — `./setup.sh` 를 한 번 돌리셔야 `datasets/deep-swe/`
+> 가 생깁니다. 이 노트북은 그게 없으면 1절에서 알려 드립니다.
+"""),
+        code(BOOTSTRAP + '''
+import json
+import subprocess
+
+LAB = Path.cwd().resolve()
+DATASETS = LAB / "datasets"
+
+# 이 랩은 데이터셋이 저장소 밖에서 오므로, 없을 때 조용히 진행하면
+# 뒤에서 엉뚱한 에러가 납니다. 여기서 먼저 확인합니다.
+EN = DATASETS / "deep-swe" / "tasks"
+KO = DATASETS / "deep-swe-ko" / "tasks"
+
+def _count(p):
+    return len([x for x in p.iterdir() if x.is_dir()]) if p.is_dir() else 0
+
+n_en, n_ko = _count(EN), _count(KO)
+table(
+    ["무엇", "어디", "몇 건"],
+    [["영어 원본", "datasets/deep-swe/tasks", n_en or "없음"],
+     ["한국어판", "datasets/deep-swe-ko/tasks", n_ko or "없음"]],
+    align=["left", "left", "right"],
+    title="데이터 준비 상태",
+)
+
+if not n_en:
+    print()
+    print("영어 데이터셋이 없습니다. 터미널에서 아래를 먼저 돌려주세요.")
+    print("    cd labs/agentic-eval && ./setup.sh")
+elif not n_ko:
+    print()
+    print("한국어판이 없습니다. 4절까지는 영어만으로 보실 수 있습니다.")
+    print("    python translate.py translate <태스크> && python translate.py stage")
+'''),
+
+        md("""
+## 1. 태스크 하나는 무엇으로 이루어져 있나
+
+DeepSWE 태스크는 텍스트 한 덩어리가 아니라 **폴더**입니다. 실제 오픈소스
+저장소의 특정 커밋을 담은 Docker 이미지와, 그걸 채점할 테스트가 함께
+들어 있습니다.
+
+아래 셀은 그 폴더를 열어 봅니다. 앞의 랩들에서 다루던 "텍스트 + 정답
+문자열" 과 무엇이 다른지 보시면 됩니다.
+"""),
+        code('''
+# 가장 가벼운 태스크입니다. 지시문이 113건 중 가장 짧아(571자) 빨리 끝납니다.
+TASK = "mashumaro-flattened-dataclass-fields"
+
+task_dir = EN / TASK
+print(f"태스크: {TASK}")
+print()
+for p in sorted(task_dir.rglob("*")):
+    if p.is_file():
+        rel = p.relative_to(task_dir)
+        print(f"    {str(rel):<28} {p.stat().st_size:>7,}B")
+
+import tomllib
+meta = tomllib.loads((task_dir / "task.toml").read_text(encoding="utf-8"))
+m = meta["metadata"]
+table(
+    ["항목", "값"],
+    [["원본 저장소", m["repository_url"].replace("https://github.com/", "")],
+     ["기준 커밋", m["base_commit_hash"][:12]],
+     ["언어", m["language"]],
+     ["분류", m["category"]],
+     ["에이전트 제한시간", f"{meta['agent']['timeout_sec'] / 3600:.1f}시간"],
+     ["네트워크", meta["agent"]["network_mode"]]],
+    align=["left", "left"],
+    title="task.toml 이 정하는 것",
+    note="네트워크가 차단되어 있습니다. 에이전트는 저장소 안의 것만 보고 "
+         "풀어야 합니다.",
+)
+'''),
+
+        md("""
+## 2. 채점은 누가 하나
+
+**이게 이 랩의 설계를 결정합니다.** 채점을 사람이나 모델이 하는 게 아니라
+**테스트 코드**가 합니다.
+
+그래서 지시문을 한국어로 바꿔도 채점 기준은 그대로입니다. 번역할 것은
+`instruction.md` 하나뿐이고, 나머지는 손대면 안 됩니다.
+"""),
+        code('''
+tests = task_dir / "tests"
+print("채점 쪽 파일")
+for p in sorted(tests.iterdir()):
+    print(f"    {p.name}")
+
+print()
+print("test.sh — 실제로 무엇을 돌리나")
+for line in (tests / "test.sh").read_text(encoding="utf-8").splitlines():
+    if line.strip() and not line.strip().startswith("#"):
+        print(f"    {line}")
+
+print()
+print("에이전트가 낸 답은 이렇게 걷어 갑니다 (task.toml 의 verifier.collect)")
+for c in meta["verifier"]["collect"]:
+    print(f"    {c['command'][:100]}")
+'''),
+
+        md("""
+## 3. 에이전트가 받는 지시문
+
+앞 절에서 본 것 중 **에이전트에게 실제로 전달되는 것은 이것 하나**입니다.
+나머지(테스트·정답 패치)는 채점할 때만 쓰이고 에이전트는 보지 못합니다.
+
+전문을 그대로 싣습니다. 명세라서 조건 하나가 빠지면 과제가 달라진다는
+점을 보시면, 다음 절의 번역 검증이 왜 필요한지 이해가 되실 겁니다.
+"""),
+        code('''
+en_text = (task_dir / "instruction.md").read_text(encoding="utf-8")
+print(en_text)
+print("─" * 70)
+print(f"{len(en_text):,}자")
+'''),
+
+        md("""
+## 4. 한국어판은 어떻게 만드나
+
+`translate.py` 가 세 단계로 합니다.
+
+```
+translate   지시문만 번역          → translations/deep-swe/ko/<태스크>.md
+verify      식별자가 살아남았나 검사
+stage       원본과 합쳐 트리 구성   → datasets/deep-swe-ko/tasks/
+```
+
+`stage` 는 `instruction.md` 만 한국어 파일을 두고, 나머지는 **원본을
+심볼릭 링크로 가리킵니다.** 그래서 채점 기준이 두 언어에서 같습니다.
+
+### verify 가 보는 것
+
+번역기가 식별자를 건드리면 태스크가 **풀 수 없게** 됩니다.
+`sort_by_label` 이 `라벨_기준_정렬` 이 되면 에이전트가 찾을 함수가
+사라집니다. 그 실패는 압축 탓처럼 보이지만 아닙니다.
+
+아래 셀에서 두 언어를 나란히 놓고, 식별자가 그대로인지 직접 확인해
+보세요.
+"""),
+        code('''
+if not n_ko:
+    print("한국어판이 없어 이 절은 건너뜁니다.")
+else:
+    import translate as TR
+    TR.set_benchmark("deep-swe")
+
+    ko_text = (KO / TASK / "instruction.md").read_text(encoding="utf-8")
+    print("한국어 지시문")
+    print(ko_text)
+    print("─" * 70)
+
+    ids = sorted(TR.identifiers(en_text))
+    lost = TR.missing(en_text, ko_text)
+    print(f"원문에서 뽑은 식별자 {len(ids)}개")
+    print(f"    {', '.join(ids)}")
+    print()
+    print(f"한국어에 없는 것: {lost if lost else '없음 — 모두 보존되었습니다'}")
+
+    # 같은 내용인데 토큰 수가 다릅니다. 언어별 비교에서 이게 왜 중요한지는
+    # 아래 note 를 보세요.
+    c = T.make_counter({"mode": "local"}, "gpt-5.4")
+    te, tk = c(en_text), c(ko_text)
+    table(
+        ["언어", "글자", "토큰"],
+        [["영어", f"{len(en_text):,}", f"{te:,}"],
+         ["한국어", f"{len(ko_text):,}", f"{tk:,}"],
+         ["차이", f"{len(ko_text) - len(en_text):+,}", f"{tk - te:+,} ({tk / te - 1:+.1%})"]],
+        align=["left", "right", "right"],
+        title=f"같은 지시문, 두 언어 — {TASK}",
+        note="절감률을 언어끼리 비교하지 마세요. 각 언어의 기준선과 "
+             "비교해야 압축 효과를 보게 됩니다.",
+    )
+'''),
+
+        md("""
+## 5. 어느 태스크가 실험에 들어가나
+
+여기에 조용한 함정이 있습니다.
+
+영어 풀과 한국어 풀의 **크기가 다릅니다.** 영어는 클론한 전부이고,
+한국어는 번역해 둔 것만 있습니다. 이때 두 언어에 각각 "시드 0 으로 5건
+뽑아라" 라고 하면 **서로 다른 태스크가 뽑힙니다.**
+
+그러면 두 언어가 서로 다른 문제를 푼 결과를 나란히 놓게 되는데, 표에는
+전혀 드러나지 않습니다. 절감률 차이를 전부 "언어 탓" 으로 읽게 됩니다.
+
+아래 셀이 그 상황을 재현하고, `launch.py` 가 어떻게 막는지 보여줍니다.
+"""),
+        code('''
+import random
+
+if not n_ko:
+    print("한국어판이 없어 이 절은 건너뜁니다.")
+else:
+    pool_en = sorted(x.name for x in EN.iterdir() if x.is_dir())
+    pool_ko = sorted(x.name for x in KO.iterdir() if x.is_dir())
+    SEED, N = 0, 3
+
+    # ① 언어별로 따로 뽑으면 — 시드가 같아도 풀이 다르면 결과가 다릅니다
+    naive_en = random.Random(SEED).sample(pool_en, N)
+    naive_ko = random.Random(SEED).sample(pool_ko, N)
+
+    # ② launch.py 방식 — 공통 태스크만 추린 뒤 뽑습니다
+    import launch as L
+    safe = L.pick_tasks("deep-swe", ["en", "ko"], N, SEED)
+
+    print(f"풀 크기 · 영어 {len(pool_en)}건 · 한국어 {len(pool_ko)}건 "
+          f"· 공통 {len(set(pool_en) & set(pool_ko))}건")
+    print(f"설정 · seed={SEED} · n_tasks={N}")
+    print()
+    table(
+        ["방식", "영어에서 뽑힌 것", "한국어에서 뽑힌 것", "짝이 맞나"],
+        [["언어별로 따로 뽑기",
+          ", ".join(x[:22] for x in naive_en),
+          ", ".join(x[:22] for x in naive_ko),
+          "맞음" if naive_en == naive_ko else "어긋남"],
+         ["공통만 추려 뽑기 (launch.py)",
+          ", ".join(x[:22] for x in safe),
+          ", ".join(x[:22] for x in safe),
+          "맞음"]],
+        align=["left", "left", "left", "center"],
+        title=f"같은 시드로 뽑아도 — seed={SEED}, n_tasks={N}",
+        note="위 행에서 두 언어가 다른 태스크를 받았다면, 그 결과표는 "
+             "언어 비교가 아니라 문제 비교입니다.",
+    )
+'''),
+
+        md("""
+## 6. 압축기는 무엇을 건드리고 무엇을 지키나
+
+에이전트가 모델에게 보내는 것은 **`messages` 배열**입니다. 앞의 랩들처럼
+"텍스트 한 덩어리" 가 아닙니다.
+
+전부 압축하면 안 됩니다. 두 곳은 손대는 순간 압축 품질과 무관하게 루프가
+무너집니다.
+
+| 보호 대상 | 왜 |
+|---|---|
+| `system` 프롬프트 | 출력 형식 계약이 들어 있습니다. 깨지면 파싱이 실패해 trial 이 0점 |
+| 마지막 2개 메시지 | 직전 관측과 현재 지시입니다. 다음 행동을 직접 결정합니다 |
+| 400자 미만 | 절감은 미미한데 깨질 위험은 그대로입니다 |
+
+아래 셀은 가짜 대화를 만들어 **어느 메시지가 압축되고 어느 것이 남는지**
+보여줍니다. 압축기는 `truncate` 를 씁니다 — 그냥 뒤를 자르는 대조군이라
+라이브러리 설치가 필요 없고, 무엇이 보호되는지가 오히려 또렷하게
+보입니다.
+"""),
+        code('''
+import compressors
+
+# ── 이 셀의 설정 ──────────────────────────────────────────────
+RATIO = 0.5          # 유지 비율. 0.5 면 절반만 남깁니다
+COMPRESSOR = "truncate"
+
+convo = [
+    {"role": "system", "content":
+     "You are a coding agent. Respond with exactly one bash command in a "
+     "```bash block. " + "Follow the protocol strictly. " * 30},
+    {"role": "user", "content": en_text},
+    {"role": "assistant", "content": "```bash\\ncat mashumaro/core/meta/types.py\\n```"},
+    {"role": "user", "content":
+     "OBSERVATION:\\n" + "def build_encoder(spec):  # 파일 내용\\n" * 40},
+    {"role": "assistant", "content": "```bash\\ngrep -rn flatten mashumaro/\\n```"},
+    {"role": "user", "content": "OBSERVATION:\\n(no matches)"},
+]
+
+fn = compressors.get(COMPRESSOR)
+out = fn(convo, RATIO)
+
+rows = []
+for i, (a, b) in enumerate(zip(convo, out)):
+    before, after = len(a["content"]), len(b["content"])
+    if before == after:
+        why = ("system 이라 보호" if a["role"] == "system"
+               else "마지막 2개라 보호" if i >= len(convo) - compressors.KEEP_LAST
+               else f"{compressors.MIN_CHARS}자 미만이라 대상 아님")
+        verdict = "그대로"
+    else:
+        why, verdict = "압축 대상", f"{1 - after / before:.0%} 줄임"
+    rows.append([i, a["role"], f"{before:,}", f"{after:,}", verdict, why])
+
+table(
+    ["#", "역할", "전", "후", "결과", "이유"],
+    rows,
+    align=["right", "left", "right", "right", "right", "left"],
+    title=f"메시지별 처리 — 압축기 {COMPRESSOR} · ratio={RATIO} "
+          f"· 보호 규칙 skip_system·keep_last={compressors.KEEP_LAST}"
+          f"·min_chars={compressors.MIN_CHARS}",
+    note="ratio 는 유지 비율입니다. 0.5 는 절반을 남긴다는 뜻입니다.",
+)
+'''),
+
+        md("""
+## 7. 프록시를 실제로 지나가 보기
+
+압축은 에이전트 안이 아니라 **에이전트와 모델 사이**에서 일어납니다.
+
+```
+에이전트 ──▶ proxy.py ──▶ 모델 API
+              └ compressors/<이름>.compress()
+```
+
+에이전트에게는 평범한 OpenAI 호환 주소로 보입니다. 그래서 DeepSWE 도
+pier 도 고치지 않습니다.
+
+아래 셀은 이걸 **실제로** 확인합니다. 모델 API 대신 **받은 것을 그대로
+알려주는 가짜 서버**를 띄우고, 그 앞에 프록시를 세웁니다. 그러면 모델이
+받았을 내용을 우리가 직접 볼 수 있습니다.
+
+API 키도 Docker 도 필요 없습니다.
+"""),
+        code('''
+import http.server
+import socket
+import threading
+import time
+import urllib.request
+
+# ── 이 셀의 설정 ──────────────────────────────────────────────
+RATIO = 0.5
+COMPRESSOR = "truncate"
+
+received = {}          # 가짜 upstream 이 받은 것을 여기 담습니다
+
+
+class FakeUpstream(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):          # noqa: N802
+        n = int(self.headers.get("Content-Length", 0))
+        received["payload"] = json.loads(self.rfile.read(n))
+        body = json.dumps({"choices": [{"message":
+                          {"role": "assistant", "content": "ok"}}]}).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *a):  # 노트북 출력을 어지럽히지 않게 끕니다
+        pass
+
+
+def free_port():
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+up_port, px_port = free_port(), free_port()
+srv = http.server.HTTPServer(("127.0.0.1", up_port), FakeUpstream)
+threading.Thread(target=srv.serve_forever, daemon=True).start()
+
+proc = subprocess.Popen(
+    [sys.executable, "proxy.py", "--compressor", COMPRESSOR,
+     "--ratio", str(RATIO), "--port", str(px_port),
+     "--host", "127.0.0.1", "--upstream", f"http://127.0.0.1:{up_port}",
+     "--arm", "notebook"],
+    cwd=LAB, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+try:
+    for _ in range(60):                      # 프록시가 뜰 때까지 기다립니다
+        with socket.socket() as s:
+            if s.connect_ex(("127.0.0.1", px_port)) == 0:
+                break
+        time.sleep(0.1)
+
+    sent = {"model": "demo", "messages": convo}
+    req = urllib.request.Request(
+        f"http://127.0.0.1:{px_port}/v1/chat/completions",
+        data=json.dumps(sent).encode(),
+        headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        r.read()
+finally:
+    proc.terminate()
+    srv.shutdown()
+
+got = received.get("payload")
+if not got:
+    print("가짜 서버가 아무것도 받지 못했습니다. 프록시가 뜨지 않았을 수 있습니다.")
+else:
+    a = sum(len(m["content"]) for m in sent["messages"])
+    b = sum(len(m["content"]) for m in got["messages"])
+    print(f"에이전트가 보낸 것 → 프록시 → 모델이 받은 것")
+    print(f"  포트  에이전트 → {px_port}(프록시) → {up_port}(모델 자리)")
+    print()
+    table(
+        ["", "메시지 수", "총 글자"],
+        [["에이전트가 보냄", len(sent["messages"]), f"{a:,}"],
+         ["모델이 받음", len(got["messages"]), f"{b:,}"],
+         ["차이", "-", f"{b - a:+,} ({1 - b / a:.1%} 줄임)"]],
+        align=["left", "right", "right"],
+        title=f"프록시를 지나며 무엇이 달라졌나 — {COMPRESSOR} · ratio={RATIO}",
+        note="메시지 개수는 그대로여야 합니다. 압축기는 내용만 줄이고 "
+             "구조는 건드리지 않습니다.",
+    )
+    print()
+    print("모델이 실제로 받은 두 번째 메시지 (앞 200자)")
+    print("   ", got["messages"][1]["content"][:200].replace(chr(10), " "))
+'''),
+
+        md("""
+## 8. launch.py 가 만드는 것
+
+여기까지가 부품이었습니다. `launch.py` 는 이것들을 조립합니다.
+
+1. arm 마다 프록시를 띄우고 포트를 배정합니다
+2. 모든 언어에 공통인 태스크를 추려 뽑습니다 (5절)
+3. 뽑힌 태스크만 모은 트리를 **언어별로** 만듭니다
+4. pier 설정을 언어별로 씁니다
+
+`--dry-run` 은 프록시를 띄우지 않고 파일만 만듭니다. 무엇이 생기는지
+보기에 좋습니다.
+"""),
+        code('''
+EXPERIMENT = "smoke"        # 태스크 1개 · 시도 1회짜리 확인용 실험
+
+print(f"experiments/{EXPERIMENT}.yaml")
+print("─" * 70)
+print((LAB / "experiments" / f"{EXPERIMENT}.yaml").read_text(encoding="utf-8"))
+print("─" * 70)
+print()
+
+r = subprocess.run(
+    [sys.executable, "launch.py", f"experiments/{EXPERIMENT}.yaml", "--dry-run"],
+    cwd=LAB, capture_output=True, text=True)
+print(r.stdout or r.stderr)
+'''),
+        code('''
+# 방금 만들어진 것을 열어 봅니다.
+runs = RUNS / "agentic-eval"
+latest = max((p for p in runs.rglob("meta.json")),
+             key=lambda p: p.stat().st_mtime, default=None)
+
+if latest is None:
+    print("생성된 실행 폴더가 없습니다. 위 셀이 실패했는지 확인해 주세요.")
+else:
+    run_dir = latest.parent
+    meta = json.loads(latest.read_text(encoding="utf-8"))
+    meta_langs = lambda _d: meta["langs"]
+    print(f"{run_dir.relative_to(RUNS.parent)}")
+    for p in sorted(run_dir.rglob("*")):
+        if p.is_dir() or p.name == "instruction.md":
+            continue
+        # 상대 경로를 그대로 씁니다. 파일 이름만 찍으면 en/pier.yaml 과
+        # ko/pier.yaml 이 똑같아 보여 구분이 안 됩니다.
+        rel = p.relative_to(run_dir)
+        if rel.parts[-2:-1] == ("tasks",):
+            continue                     # 태스크 링크는 개수만 아래에서 셉니다
+        print(f"    {rel}")
+
+    for lang in meta_langs(run_dir):
+        n = len(list((run_dir / lang / "tasks").iterdir()))
+        print(f"    {lang}/tasks/  — 태스크 {n}건 (원본을 가리키는 링크)")
+
+    table(
+        ["항목", "값"],
+        [[k, ", ".join(v) if isinstance(v, list) else str(v)]
+         for k, v in meta.items()],
+        align=["left", "left"],
+        title="meta.json — 이 실행이 무슨 조건이었나",
+        note="폴더 이름만으로는 태스크 목록까지 알 수 없어 따로 남깁니다.",
+    )
+
+    for lang in meta["langs"]:
+        cfg = run_dir / lang / "pier.yaml"
+        if cfg.exists():
+            print()
+            print(f"{lang}/pier.yaml")
+            for line in cfg.read_text(encoding="utf-8").splitlines():
+                print(f"    {line}")
+'''),
+
+        md("""
+## 9. 여기서부터는 Docker 가 필요합니다
+
+실제 실행은 노트북에서 하지 않습니다. 태스크 하나에 컨테이너가 2개
+(작업용·채점용) 뜨고, 제한시간이 최대 3시간입니다.
+
+아래 셀은 **준비가 되었는지만** 확인하고 명령을 출력합니다.
+"""),
+        code('''
+def have(cmd):
+    return subprocess.run(["which", cmd], capture_output=True).returncode == 0
+
+docker_ok = have("docker") and subprocess.run(
+    ["docker", "info"], capture_output=True).returncode == 0
+
+table(
+    ["필요한 것", "상태", "없으면"],
+    [["docker", "있음" if have("docker") else "없음", "Docker Desktop 설치"],
+     ["docker 데몬", "떠 있음" if docker_ok else "안 뜸", "Docker Desktop 실행"],
+     ["pier", "있음" if have("pier") else "없음", "./setup.sh"],
+     ["모델 API 키", "OPENAI_API_KEY 필요", "환경변수로 지정"]],
+    align=["left", "left", "left"],
+    title="실제 실행에 필요한 것",
+)
+
+print()
+print("준비되셨으면 터미널에서 아래 순서로 돌리세요.")
+print()
+print("  # 1. 프록시를 띄우고 설정을 만듭니다 (켜 둔 채 대기합니다)")
+print("  PUBLIC_HOST=<컨테이너에서 닿는 호스트명> \\\\")
+print(f"    ./.venv/bin/python launch.py experiments/{EXPERIMENT}.yaml")
+print()
+print("  # 2. 다른 터미널에서 — 언어마다 한 번씩입니다")
+print("  pier run --config <위에서 출력된 en/pier.yaml>")
+print("  pier run --config <위에서 출력된 ko/pier.yaml>")
+print()
+print("  # 3. 집계")
+print("  ./.venv/bin/python analyze.py <실행 폴더> --jobs <pier jobs 경로>")
+print()
+print("PUBLIC_HOST 에 localhost 는 쓸 수 없습니다. 컨테이너 안의 localhost 는")
+print("컨테이너 자신이라 프록시에 닿지 못합니다.")
+'''),
+
+        md("""
+## 10. 무엇을 보게 되나
+
+`analyze.py` 가 arm 별로 두 가지를 냅니다.
+
+| 지표 | 어디서 오나 |
+|---|---|
+| **pass@1** | `reward.json` — 테스트가 통과했나 |
+| **토큰** | 에이전트 실행 로그 — 실제로 얼마나 썼나 |
+
+앞의 랩들과 읽는 법이 다릅니다.
+
+- 랩 00~04 는 **보존율**을 봤습니다. 정답 문자열이 남았는가 — 값싸지만
+  대리 지표입니다
+- 여기서는 **일을 끝냈는가**를 봅니다. 느리고 비싸지만 실전에 가깝습니다
+
+### 확인해 보실 것
+
+1. **기준선(`baseline`)이 통과하는가** — 여기가 0 이면 압축 arm 을 볼
+   이유가 없습니다. 태스크가 원래 어려운 것인지 환경이 잘못된 것인지부터
+   가려야 합니다
+2. **압축 arm 의 토큰이 정말 줄었는가** — 정보가 깨져 파일을 다시 읽으면
+   **오히려 늘어납니다**
+3. **`truncate` 대조군과 비교해서 나은가** — 정교한 압축기가 그냥
+   잘라내기보다 못하면 값을 못 한 것입니다
+4. **언어별로 방향이 같은가** — 5절에서 짝을 맞췄으므로, 차이가 나면
+   그건 태스크가 아니라 언어 때문입니다
+
+### 규모를 늘리실 때
+
+`smoke` 는 태스크 1개 · 시도 1회입니다. 실제 비교는 `lib-compare` 나
+`ratio-sweep` 으로 하시되, **trial 수가 곱셈으로 늘어납니다.**
+
+```
+trial = arm 수 × 태스크 수 × 시도 수 × 언어 수
+```
+
+`lib-compare` 는 6 arm × 5 태스크 × 3 시도 × 2 언어 = **180 trial** 이고
+각각 최대 3시간입니다. 먼저 `smoke` 로 파이프라인을 통과시키신 뒤에
+늘리세요.
+"""),
+    ])
+
+
 BUILDERS = {"00": ("00-baseline", nb_00),
             "01": ("01-lossless-structure", nb_01),
             "02": ("02-handle-ref", nb_02),
             "03": ("03-summarize-llm", nb_03),
-            "04": ("04-llmlingua", nb_04)}
+            "04": ("04-llmlingua", nb_04),
+            "eval": ("agentic-eval", nb_eval)}
 
 
 def main(argv: list) -> int:

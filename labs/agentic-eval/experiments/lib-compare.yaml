@@ -16,8 +16,16 @@ model: openai/gpt-5.5
 agent: mini-swe-agent
 
 dataset:
-  n_tasks: 5
-  sample_seed: 0
+  # 쓸 태스크를 이름으로 적습니다. 지금은 한국어로 번역해 둔 것만
+  # 올려 두었습니다. 비워 두시면(tasks: []) 공통인 것을 전부 씁니다.
+  tasks:
+    - aiomonitor-task-snapshots-diff
+    - etree-xml-diff-patch
+    - httpx-streaming-json-iteration
+    - mashumaro-flattened-dataclass-fields
+    - mnamer-daemon-watch-lifecycle
+    - opa-rego-rule-profiling
+    - updo-policy-alerting
 
 n_attempts: 3
 n_concurrent_trials: 4

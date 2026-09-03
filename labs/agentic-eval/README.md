@@ -25,6 +25,8 @@ translations/     번역 결과 (커밋). 번역 비용을 다시 치르지 않�
   deep-swe/ko/
 proxy.py          OpenAI 호환 압축 프록시 (표준 라이브러리만 씁니다)
 compressors/      라이브러리 하나가 파일 하나입니다
+                    truncate.py 는 대조군입니다 — 그냥 뒤를 자릅니다
+run.ipynb         파이프라인을 한 단계씩 보는 노트북 (build_notebooks.py 가 생성)
 experiments/      질문 하나가 파일 하나이자 pier 실행 한 번입니다
 launch.py         arm 기동 + 포트 배정 + pier 설정 생성
 analyze.py        reward 와 토큰 집계
@@ -113,6 +115,25 @@ B(압축)    에이전트 ──▶ 프록시 ──▶ 모델 API
 에이전트 입장에서는 평범한 OpenAI 호환 엔드포인트라서 아무것도 눈치채지
 못합니다. `labs/05-headroom`을 import하지 않고 **별도 프로세스 + URL**로만
 연결하는 것도 같은 이유입니다.
+
+## 처음이시면 노트북부터
+
+`run.ipynb` 가 파이프라인을 한 단계씩 보여줍니다. 태스크 하나만 쓰고,
+**8절까지는 Docker 도 API 키도 필요 없습니다.**
+
+```
+1~6절   태스크 구조 · 채점 방식 · 번역 · 태스크 선정 · 압축 보호 규칙
+7절     프록시 왕복 — 가짜 서버를 띄워 모델이 받았을 내용을 직접 확인
+8절     launch.py 가 만드는 것 (--dry-run)
+9~10절  실제 실행 안내와 읽는 법
+```
+
+노트북은 `build_notebooks.py` 가 만듭니다. **직접 고치지 마시고** 거기를
+고쳐 다시 빌드하세요.
+
+```bash
+cd .. && ./.venv/bin/python build_notebooks.py eval
+```
 
 ## 실행 방법
 
