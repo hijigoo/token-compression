@@ -1,0 +1,36 @@
+# 이 랩은 전용 venv 를 씁니다. pier 를 git 에서 설치하는데 전이 의존성이
+# 무엇을 끌어올지 고정돼 있지 않아, 루트 .venv 를 오염시키면 랩 00~03 이
+# 함께 깨집니다.
+#
+#   cd labs/agentic-eval
+#   ./setup.sh                       # venv 생성 + 아래를 설치합니다
+#
+# 직접 하시려면:
+#   uv venv
+#   uv pip install --python .venv -r requirements.txt
+#
+# 그 다음 VS Code 나 Jupyter 에서 커널을 이 랩의 .venv 로 골라주세요.
+
+# ── 러너 ──────────────────────────────────────────────────────
+# DeepSWE 를 Docker 로 돌리고 채점합니다. PyPI 에 없어 git 에서 받습니다.
+# 저장소 이름은 pier 지만 배포 이름은 datacurve-pier 입니다. 여기가 어긋나면
+# uv 가 "metadata name does not match" 로 거부합니다. 명령은 pier 로 씁니다.
+datacurve-pier @ git+https://github.com/datacurve-ai/pier
+
+# ── 노트북 ────────────────────────────────────────────────────
+# uv 로 만든 환경에는 기본으로 없습니다. 빠지면 VS Code 가
+# "requires the ipykernel package" 라고 합니다.
+ipykernel
+
+# ── 압축기 ────────────────────────────────────────────────────
+# proxy.py 와 compressors/none·truncate 는 표준 라이브러리만 씁니다.
+# 사내망처럼 설치가 어려운 곳에서도 파이프라인 전체가 돌아가야 해서입니다.
+#
+# 나머지는 무거우니 쓰실 arm 만 따로 설치하세요.
+#
+#   uv pip install --python .venv llmlingua              # llmlingua arm
+#   uv pip install --python .venv sentence-transformers  # recomp arm
+#   uv pip install --python .venv 'headroom-ai[code]'    # headroom arm
+
+# kit — 토큰 계수, .env 로딩, 표 출력
+-r ../kit/requirements.txt

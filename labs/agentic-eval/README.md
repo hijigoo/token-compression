@@ -16,7 +16,8 @@ DeepSWE 태스크를 실제로 풀게 해서 **pass@1**을 봅니다. 느리고 
 ## 폴더 구성
 
 ```
-setup.sh          데이터셋 클론 + pier 설치
+setup.sh          데이터셋 클론 + venv 생성 + 의존성 설치
+requirements.txt  이 랩 전용 의존성. 루트 .venv 와 섞지 않습니다
 datasets/         벤치마크 데이터 (커밋 제외). 코퍼스가 아니라 Docker 픽스처입니다
   deep-swe/         영어 원본 — setup.sh 가 클론합니다
   deep-swe-ko/      한국어판 — translate.py stage 가 만듭니다
@@ -128,12 +129,35 @@ B(압축)    에이전트 ──▶ 프록시 ──▶ 모델 API
 9~10절  실제 실행 안내와 읽는 법
 ```
 
+커널은 **이 폴더의 `.venv`** 로 골라주세요. 루트 `.venv` 와 다릅니다 —
+`pier` 가 Python 3.12 이상을 요구하고 git 에서 설치돼서, 루트를 오염시키면
+랩 00~03 이 함께 깨집니다.
+
+```bash
+./setup.sh          # .venv 생성 + pier·ipykernel·kit 설치
+```
+
 노트북은 `build_notebooks.py` 가 만듭니다. **직접 고치지 마시고** 거기를
 고쳐 다시 빌드하세요.
 
 ```bash
 cd .. && ./.venv/bin/python build_notebooks.py eval
 ```
+
+### 무엇을 바꿔 보시면 되나
+
+첫 셀에 설정이 모여 있습니다. 압축기를 바꾸시려면 한 줄이면 됩니다.
+
+```python
+BENCHMARK  = "deep-swe"
+TASK       = "mashumaro-flattened-dataclass-fields"
+COMPRESSOR = "truncate"      # none | truncate | llmlingua | recomp
+RATIO      = 0.5
+EXPERIMENT = "smoke"
+```
+
+`none` 과 `truncate` 는 표준 라이브러리만 씁니다. `llmlingua`·`recomp` 는
+따로 설치하셔야 합니다.
 
 ## 실행 방법
 

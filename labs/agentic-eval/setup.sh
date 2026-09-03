@@ -8,7 +8,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 DEEPSWE_REPO="https://github.com/datacurve-ai/deep-swe"
-PIER_REPO="https://github.com/datacurve-ai/pier"
+# pier 주소는 requirements.txt 가 갖고 있습니다. 두 곳에 적으면 어긋납니다.
 
 log()  { printf '\033[36m▸ %s\033[0m\n' "$*"; }
 warn() { printf '\033[33m! %s\033[0m\n' "$*"; }
@@ -18,12 +18,19 @@ die()  { printf '\033[31m✗ %s\033[0m\n' "$*" >&2; exit 1; }
 command -v git >/dev/null || die "git 이 필요합니다"
 command -v uv  >/dev/null || die "uv 가 필요합니다 (https://docs.astral.sh/uv/)"
 
+# Docker 는 **실제 실행할 때만** 필요합니다. 준비 단계에서 막지 않습니다.
+# run.ipynb 은 8절까지 Docker 없이 돌고, 그게 이 랩을 처음 보는 사람이
+# 밟는 경로입니다. 여기서 죽이면 노트북을 열어보지도 못합니다.
+DOCKER_OK=0
 if ! command -v docker >/dev/null; then
-  die "docker 가 필요합니다. 태스크당 컨테이너가 2개(작업용/채점용) 뜹니다."
+  warn "docker 가 없습니다. run.ipynb 8절까지는 그대로 보실 수 있습니다."
+  warn "  실제 실행에는 필요합니다 — 태스크당 컨테이너가 2개(작업용/채점용) 뜹니다."
 elif ! docker info >/dev/null 2>&1; then
-  die "docker 데몬이 떠 있지 않습니다. Docker Desktop 을 실행하세요."
+  warn "docker 데몬이 떠 있지 않습니다. 실제 실행 전에 Docker Desktop 을 켜주세요."
+else
+  DOCKER_OK=1
+  log "docker 확인됨"
 fi
-log "docker 확인됨"
 
 # ── 2. 데이터셋 ──────────────────────────────────────────────
 # 코퍼스가 아니라 Docker 실행 픽스처라 labs/data/ 가 아니라 여기 둔다.
@@ -46,13 +53,14 @@ if [[ ! -d .venv ]]; then
   uv venv
 fi
 
-log "pier 설치 중…"
-uv pip install --python .venv "git+${PIER_REPO}" || \
-  warn "pier 설치 실패 — 수동 설치가 필요할 수 있습니다: uv pip install git+${PIER_REPO}"
+log "의존성 설치 중… (pier·ipykernel·kit)"
+uv pip install --python .venv -r requirements.txt || \
+  warn "설치 실패 — 수동으로: uv pip install --python .venv -r requirements.txt"
 
 cat <<'EOF'
 
-  압축기는 필요한 것만 설치하세요 (모두 무겁습니다):
+  압축기는 필요한 것만 설치하세요 (모두 무겁습니다).
+  none·truncate 는 표준 라이브러리만 써서 지금도 돌아갑니다.
 
     uv pip install --python .venv 'headroom-ai[code]'   # headroom arm
     uv pip install --python .venv llmlingua             # llmlingua arm
@@ -62,17 +70,21 @@ EOF
 
 # ── 4. 다음 단계 ─────────────────────────────────────────────
 cat <<'EOF'
-  다음 단계
+  먼저 run.ipynb 을 열어보세요. 파이프라인을 한 단계씩 보여줍니다.
+  8절까지는 Docker 도 API 키도 필요 없습니다.
+  커널은 이 폴더의 .venv 로 골라주세요.
+
+  다음 단계 — 실제로 돌리실 때
 
   1) 컨테이너에서 도달 가능한 주소를 준비합니다.
      컨테이너 안의 localhost 는 컨테이너 자신이라 반드시 실패합니다.
        · 사내 서버/VM 에 띄우고 그 호스트명 사용  ← 권장 (포트만 늘리면 됨)
        · 또는 cloudflared/ngrok 터널 (arm 당 1개씩 필요)
 
-  2) 기준선부터 파이프라인을 검증합니다 (n_tasks: 5).
-       PUBLIC_HOST=<호스트> ./.venv/bin/python launch.py experiments/ratio-sweep.yaml
+  2) 기준선부터 파이프라인을 검증합니다 (태스크 1개짜리 smoke).
+       PUBLIC_HOST=<호스트> ./.venv/bin/python launch.py experiments/smoke.yaml
 
-  3) 출력된 pier 명령을 다른 터미널에서 실행합니다.
+  3) 출력된 pier 명령을 다른 터미널에서 실행합니다. (Docker 필요)
 
   4) 집계합니다.
        ./.venv/bin/python analyze.py runs/... --jobs <pier jobs 경로>
