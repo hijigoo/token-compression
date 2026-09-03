@@ -69,6 +69,10 @@ uv pip install --python .venv/bin/python -r requirements.txt
 jupyter lab run.ipynb
 ```
 
+노트북 **1-1 절에 모델 선택 드롭다운**이 있습니다. 바꾸신 뒤 아래 셀들을
+다시 실행하면 그 모델로 결과가 나옵니다. `ipywidgets`가 없으면 드롭다운
+대신 `MODEL = "small"` 변수를 직접 고치시면 됩니다.
+
 ## 결과 — `sample-bilingual` 12건 (한·영 6쌍)
 
 ### 표 읽는 법

@@ -16,4 +16,8 @@ llmlingua          # torch·transformers 를 함께 끌어옵니다
 # 빠지면 VS Code 가 "requires the ipykernel package" 라고 합니다.
 ipykernel
 
+# 노트북 1-1 절의 모델 선택 드롭다운에 씁니다.
+# 없어도 동작합니다 — MODEL 변수를 직접 고치면 됩니다.
+ipywidgets
+
 -r ../kit/requirements.txt
