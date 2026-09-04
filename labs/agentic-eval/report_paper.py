@@ -533,7 +533,7 @@ def read_rollout(run_dirs, jobs: list[Path]) -> dict | None:
                 r["lang"] = tail
                 break
 
-    # 대조 측정은 조건이 전부 동일하므로 base_url 도 동일합니다. 그래서
+    # 압축 없이 반복 측정은 조건이 전부 동일하므로 base_url 도 동일합니다. 그래서
     # trial 을 조건에 귀속시킬 수 없습니다(전부 마지막 조건으로 몰립니다).
     # 조건이 같다는 것은 곧 **반복 측정**이라는 뜻이므로, 태스크별로 묶어
     # 회차 번호를 부여합니다. 이렇게 해야 "같은 태스크를 세 번 돌렸을 때
@@ -706,8 +706,8 @@ def _incomplete(doc: Doc, D: dict) -> None:
     됩니다. 그 상태를 숨기면 읽는 사람이 확정 수치로 오해합니다.
     """
     warn = []
-    for key, label in (("main", "주 측정"), ("swe", "DeepSWE"),
-                       ("control", "대조 측정")):
+    for key, label in (("main", "압축 조건 비교"), ("swe", "DeepSWE"),
+                       ("control", "압축 없이 반복 측정")):
         d = D.get(key)
         if not d:
             continue
@@ -737,7 +737,7 @@ def _base_of(roll):
 
 
 def _ctl_spread(D):
-    """대조 측정에서 얻은 pass@1 · 입력 토큰의 회차 간 편차."""
+    """압축 없이 반복 측정에서 얻은 pass@1 · 입력 토큰의 회차 간 편차."""
     ctl = D.get("control")
     if not ctl or len(ctl["by_arm"]) < 2:
         return None, None
@@ -852,7 +852,7 @@ def _abstract(doc: Doc, D: dict) -> None:
 
     if pspread is not None:
         doc.abstract.append(
-            f"다만 동일 조건을 반복 측정한 대조군에서 pass@1 이 "
+            f"다만 동일 조건을 반복 측정한 압축 없이 반복 측정에서 pass@1 이 "
             f"±{pspread * 100:.1f}%p, 입력 토큰이 ±{tspread * 100:.1f}% "
             f"범위로 변동하였습니다. **관측된 변화의 상당 부분이 이 변동 "
             f"범위 내에 있으므로, 경향은 확인되나 효과의 크기는 현재 표본"
@@ -945,7 +945,7 @@ def _design(doc: Doc, D: dict) -> list:
             ["스텝 상한", "60회. 압축으로 에이전트가 헤맬 때 무한정 늘어나는 "
              "것을 막습니다. **전 조건 동일**하게 적용하였습니다."],
             ["시도 횟수", "태스크·조건당 1회 (`n_attempts=1`). 동일 태스크를 "
-             "반복 시도하지 않으며, 반복에 따른 변동은 별도의 대조 측정으로 "
+             "반복 시도하지 않으며, 반복에 따른 변동은 별도의 압축 없이 반복 측정으로 "
              "추정하였습니다."]]
     B += [Table(doc.next_table(), "공통 실험 환경", ["항목", "내용"], rows)]
     B += [Note("모델 구성이 두 단계입니다. **압축 단계**에서는 LLMLingua-2 가 "
@@ -1023,16 +1023,16 @@ def _design(doc: Doc, D: dict) -> list:
     rows = []
     if m:
         t, lg, tr = spec(m)
-        rows.append(["주 측정 (TB)", "Terminal Bench 2.1", t, lg,
+        rows.append(["압축 조건 비교 (TB)", "Terminal Bench 2.1", t, lg,
                      str(len(m["by_arm"])), tr, "정확도·토큰 비교"])
     if ctl:
         t, lg, tr = spec(ctl)
-        rows.append(["대조 측정 (TB)", "Terminal Bench 2.1", t, lg,
+        rows.append(["압축 없이 반복 측정 (TB)", "Terminal Bench 2.1", t, lg,
                      f"{len(ctl['by_arm'])} (반복)", tr,
-                     "반복 측정 변동 추정"])
+                     "회차 간 편차 추정"])
     if sw:
         t, lg, tr = spec(sw)
-        rows.append(["주 측정 (SWE)", "DeepSWE", t, lg,
+        rows.append(["압축 조건 비교 (SWE)", "DeepSWE", t, lg,
                      str(len(sw["by_arm"])), tr, "대규모 컨텍스트 검증"])
     if rows:
         B += ["측정 구성",
@@ -1047,15 +1047,15 @@ def _design(doc: Doc, D: dict) -> list:
         same = ({r["task"] for r in ctl["rows"]} == {r["task"] for r in m["rows"]}
                 and {r["lang"] for r in ctl["rows"]}
                 == {r["lang"] for r in m["rows"]})
-        B += [Note(("대조 측정은 전 조건 압축을 적용하지 않고 주 측정과 "
-                    "**동일한 태스크·언어·설정**으로 수행한 반복 측정입니다. "
+        B += [Note(("두 번째 줄은 **압축을 끄고 같은 태스크·언어·설정으로 "
+                    "여러 번 돌린 것**입니다. "
                     if same else
-                    "⚠️ 대조 측정의 태스크 또는 언어 구성이 주 측정과 "
-                    "다릅니다. 변동 폭 적용 시 주의가 필요합니다. ") +
-                   "조건이 동일하므로 조건 간 차이는 전부 반복 측정 변동에 "
-                   "해당하며, 주 측정 결과의 유의성 판단 기준으로 "
-                   "사용합니다. 대조 측정은 Terminal Bench 에 대해서만 "
-                   "수행하였습니다.")]
+                    "⚠️ 압축 없이 반복 측정의 태스크 또는 언어 구성이 압축 "
+                    "조건 비교와 다릅니다. 편차 적용 시 주의가 필요합니다. ") +
+                   "조건이 전부 같으므로 회차 간에 나타난 차이는 전부 "
+                   "**측정 자체의 흔들림**입니다. 이 폭을 알아야 압축으로 "
+                   "생긴 변화가 실제 효과인지 우연인지 판별할 수 있습니다. "
+                   "Terminal Bench 에 대해서만 수행하였습니다.")]
     return B
 
 
@@ -1103,7 +1103,7 @@ def _params(doc: Doc, D: dict) -> list:
                          "—" if a["compressor"] == "none" else f"{a['rate']}",
                          "—" if a["compressor"] == "none" else "기본값"])
         B += ["실험 조건",
-              Table(doc.next_table(), "주 측정 실험 조건",
+              Table(doc.next_table(), "압축 조건 비교 실험 조건",
                     ["조건", "압축기", "rate", "기타 파라미터"], rows,
                     align="llrl"),
               Note("`rate` 외 하이퍼파라미터는 라이브러리 기본값을 사용하였습니다. "
@@ -1202,7 +1202,7 @@ def _results(doc: Doc, D: dict) -> list:
              "뜻합니다.")
     B += ["종합 결과",
           Table(doc.next_table(),
-                "조건별 종합 성능 (주 측정 세트, trial 평균)",
+                "조건별 종합 성능 (압축 조건 비교 세트, trial 평균)",
                 ["조건", "통과 / 완료", "pass@1", "pass@1 기준차", "입력 토큰",
                  "토큰 기준차", "출력 토큰", "스텝", "소요(초)"],
                 rows, align="lrrrrrrrr"),
@@ -1265,7 +1265,7 @@ def _results(doc: Doc, D: dict) -> list:
         if rows:
             B += ["압축 동작 특성",
                   Table(doc.next_table(),
-                        "호출 단위 압축률 및 지연 분포 (주 측정 실행 중 실측)",
+                        "호출 단위 압축률 및 지연 분포 (압축 조건 비교 실행 중 실측)",
                         ["조건", "호출 수", "평균", "중앙값", "10분위",
                          "90분위", "지연 중앙값(ms)", "지연 90분위(ms)"],
                         rows, align="lrrrrrrr"),
@@ -1275,7 +1275,7 @@ def _results(doc: Doc, D: dict) -> list:
                        "일치하지 않습니다.")]
 
     # ── 언어별 ──────────────────────────────────────────────
-    # MS 문서 세트를 따로 두던 것을 없애고, 주 측정이 en·ko 를 모두
+    # MS 문서 세트를 따로 두던 것을 없애고, 압축 조건 비교이 en·ko 를 모두
     # 포함하도록 바꿨습니다. 별도 세트를 쓰면 태스크가 달라 언어 효과와
     # 태스크 효과가 섞였습니다.
     langs = sorted({r["lang"] for r in m["rows"]})
@@ -1348,18 +1348,29 @@ def _analysis(doc: Doc, D: dict) -> list:
                 f"`rate` 는 유지 비율이므로 값이 작을수록 압축 강도가 "
                 f"높습니다.")]
         B += [Figure(doc.next_fig(),
-                     "압축률에 따른 pass@1 및 입력 토큰",
+                     "압축률에 따른 정확도와 토큰 (기준 조건 = 1.0)",
+                     # 두 값을 한 축에 그리려면 단위를 맞춰야 합니다.
+                     # pass@1 은 절대값(0.64)이고 토큰은 기준 대비
+                     # 비율(0.77)이라, 그대로 겹치면 축 이름을 붙일 수
+                     # 없습니다. 둘 다 **기준 조건을 1.0 으로 둔 상대값**
+                     # 으로 바꾸면 "무엇이 더 빨리 떨어지는가" 가 보입니다.
                      line_chart(
                          [a["rate"] for a in band],
-                         [("pass@1", [a["pass1"] for a in band]),
-                          ("입력 토큰(기준 대비)",
+                         [("pass@1 (기준 대비)",
+                           [(a["pass1"] / b["pass1"]) if
+                            (a["pass1"] is not None and b["pass1"])
+                            else None for a in band]),
+                          ("입력 토큰 (기준 대비)",
                            [(a["in_tok"] / b["in_tok"]) if
                             (a["in_tok"] and b["in_tok"]) else None
                             for a in band])],
-                         "rate (유지 비율)", "비율"),
-                     "rate=1.0 은 압축 미적용 조건입니다. 압축 강도를 "
-                     "높이면 입력 토큰은 감소하나 pass@1 도 함께 "
-                     "감소합니다.")]
+                         "rate (유지 비율)", "기준 조건 대비"),
+                     f"rate=1.0 은 압축 미적용 조건이며 두 선 모두 1.0 에서 "
+                     f"출발합니다(기준 pass@1 {pc(b['pass1'], 1)} · 입력 토큰 "
+                     f"{num(b['in_tok'])}). 아래로 내려갈수록 기준보다 "
+                     f"낮다는 뜻입니다 — 토큰은 낮을수록 좋고 pass@1 은 "
+                     f"낮을수록 나쁩니다. **두 선이 함께 내려가면 절감의 "
+                     f"대가로 정확도를 내주고 있다는 뜻입니다.**")]
         B += [Figure(doc.next_fig(),
                      "압축률과 정확도의 상충 관계",
                      scatter([(a["name"].replace("llmlingua2-", ""),
@@ -1413,53 +1424,56 @@ def _analysis(doc: Doc, D: dict) -> list:
                        "과대평가됩니다. 종단 측정에서의 실제 토큰 사용량으로 "
                        "검증해야 합니다.")]
 
-    # ── 6.3 반복 측정 변동 ──────────────────────────────────────
+    # ── 6.3 회차 간 편차 ──────────────────────────────────────
     B += _variance(doc, m, b, ctl)
     return B
 
 
 def _variance(doc: Doc, m, b, ctl) -> list:
-    """대조 측정을 **태스크별 반복**으로 해석합니다.
+    """압축 없이 반복 측정을 **태스크별 반복**으로 해석합니다.
 
-    조건 평균만 비교하면 "세 조건이 각각 몇 % 였다" 로 끝나지만, 대조
-    측정은 동일 조건을 태스크마다 3회 반복한 것이므로 태스크 단위로
+    조건 평균만 비교하면 "세 회차가 각각 몇 % 였다" 로 끝나지만, 이 측정은
+    압축을 끄고 같은 태스크를 3회 돌린 것이므로 태스크 단위로
     보아야 정보가 나옵니다. 같은 태스크를 3회 돌렸을 때 결과가 갈리면
     그 태스크의 성패는 단일 측정으로 판정할 수 없다는 뜻입니다.
     """
     B = []
     if not ctl or len(ctl["by_arm"]) < 2:
         return B
-    B += ["반복 측정 변동"]
-    B += [P("동일 조건(압축 미적용)으로 주 측정과 같은 태스크를 반복 "
-            "측정하였습니다. 조건이 동일하므로 관측된 모든 차이는 측정 "
-            "변동에 해당합니다.")]
+    B += ["같은 조건을 다시 돌리면 얼마나 달라지나"]
+    B += [P("압축을 끄고 같은 태스크를 여러 번 돌렸습니다. 조건이 전부 "
+            "같으므로 회차 간에 나타난 차이는 전부 측정 자체의 흔들림입니다.")]
 
     # 태스크별 반복 결과
     per = {}
     for r in ctl["rows"]:
-        per.setdefault(r["task"], []).append(r)
-    rows, flaky, det = [], 0, 0
-    for t, band in sorted(per.items()):
+        per.setdefault((r["task"], r["lang"]), []).append(r)
+    # 태스크만으로 묶으면 en 과 ko 가 한 칸에 섞입니다. 한국어가 같은
+    # 내용에 토큰을 더 쓰므로, 그러면 언어 차이가 회차 편차로 잘못
+    # 잡힙니다(실제로 +757% 같은 값이 나왔습니다). 언어까지 묶습니다.
+    rows, flaky, det, reps = [], 0, 0, 0
+    for (t, lg), band in sorted(per.items()):
         rw = [x["reward"] for x in band if x["reward"] is not None]
         tk = [x["in_tok"] for x in band if x["in_tok"]]
         k, n = sum(1 for x in rw if x > 0), len(rw)
+        reps = max(reps, n)
         if n > 1:
             if 0 < k < n:
                 flaky += 1
             else:
                 det += 1
         spread = (max(tk) / min(tk) - 1) if len(tk) > 1 else None
-        rows.append([f"`{t}`", f"{k}/{n}",
-                     "가변" if 0 < k < n else "일정",
+        rows.append([f"`{t}`", lg, f"{k}/{n}",
+                     "갈림" if 0 < k < n else "일정",
                      num(mean(tk)), rel(spread) if spread is not None else "—"])
     B += [Table(doc.next_table(),
-                "대조 측정 태스크별 반복 결과 (압축 미적용, 반복 3회)",
-                ["태스크", "통과", "판정 안정성", "평균 입력 토큰",
-                 "토큰 최대 편차"], rows, align="lrlrr")]
+                f"태스크·언어별 결과 (같은 조건 {reps}회 반복)",
+                ["태스크", "언어", "통과", "판정", "평균 입력 토큰",
+                 "토큰 최대 편차"], rows, align="llrlrr")]
     if flaky:
         B += [P(f"반복 간 결과가 갈린 태스크가 **{flaky}종**입니다"
                 f"(안정적으로 판정된 태스크 {det}종). 해당 태스크는 단일 "
-                f"측정으로 성패를 판정할 수 없으며, 주 측정에서 관측된 "
+                f"측정으로 성패를 판정할 수 없으며, 압축 조건 비교에서 관측된 "
                 f"통과·실패에도 동일한 불확실성이 존재합니다.")]
 
     # 조건 단위 (= 반복 회차 단위) pass@1 범위
@@ -1472,7 +1486,7 @@ def _variance(doc: Doc, m, b, ctl) -> list:
                  rel(a["in_tok"] / hi - 1)]
                 for a in ctl["by_arm"] if a["in_tok"]]
         B += [Table(doc.next_table(),
-                    "대조 측정 회차별 집계 (전 회차 압축 미적용)",
+                    "회차별 집계 (전 회차 압축 없음)",
                     ["회차", "통과", "pass@1", "입력 토큰", "최대값 대비"],
                     rows, align="lrrrr")]
         tspread = max(abs(t / hi - 1) for _, t in toks)
@@ -1485,7 +1499,7 @@ def _variance(doc: Doc, m, b, ctl) -> list:
                     f"확인되었습니다.")
         B += [P(txt),
               Figure(doc.next_fig(),
-                     "대조 측정 회차별 pass@1 (전 회차 동일 조건)",
+                     "회차별 pass@1 (전 회차 동일 조건)",
                      grouped_bars([("pass@1 (%)",
                                     [(a["pass1"] or 0) * 100
                                      for a in ctl["by_arm"]])],
@@ -1515,7 +1529,7 @@ def _variance(doc: Doc, m, b, ctl) -> list:
                              else "변동 범위 내"])
         if rows:
             B += [Table(doc.next_table(),
-                        "주 측정 결과의 유의성 판정",
+                        "압축 조건 비교 결과의 유의성 판정",
                         ["조건", "지표", "관측 변화", "측정 변동", "판정"],
                         rows, align="llrrl"),
                   Note("‘변동 범위 내’ 는 해당 변화가 압축 효과인지 측정 "
@@ -1534,7 +1548,7 @@ def _limits(doc: Doc, D: dict) -> list:
         txt = (f"조건당 태스크 {n_t}종, 시도 1회. 태스크 1건의 성패가 "
                f"pass@1 을 {100 / n_t:.1f}%p 변동시킵니다.")
         if pspread is not None:
-            txt += (f" 대조 측정에서 확인된 실제 변동은 pass@1 "
+            txt += (f" 압축 없이 반복 측정에서 확인된 실제 변동은 pass@1 "
                     f"±{pspread * 100:.1f}%p, 입력 토큰 "
                     f"±{tspread * 100:.1f}% 로, 본 측정에서 관측된 변화와 "
                     f"같은 크기입니다. **효과의 방향은 판별 가능하나 크기는 "
@@ -1542,7 +1556,7 @@ def _limits(doc: Doc, D: dict) -> list:
         rows.append(["표본 규모", txt])
         rows.append(["태스크 판정 안정성",
                      "일부 태스크는 동일 조건 반복에서도 성패가 갈렸습니다"
-                     "(5장 대조 측정 표 참조). 개별 태스크의 통과·실패를 "
+                     "(5장 압축 없이 반복 측정 표 참조). 개별 태스크의 통과·실패를 "
                      "근거로 조건을 평가하지 마십시오."])
     rows += [
         ["대상 범위",
@@ -1597,7 +1611,7 @@ def _conclusion(doc: Doc, D: dict) -> list:
                         f"압축을 적용했음에도 토큰이 **증가**하여, 해당 구간에서는 "
                         f"정확도와 비용이 동시에 악화되었습니다. 감소가 관측된 "
                         f"조건은 정확도 하락 폭이 가장 컸으며, 그 감소율 역시 "
-                        f"반복 측정 변동 범위와 겹칩니다. 따라서 현재 표본으로는 "
+                        f"회차 간 편차 범위와 겹칩니다. 따라서 현재 표본으로는 "
                         f"비용 절감 효과를 확정할 수 없습니다.")
         else:
             tok_note = ("입력 토큰은 감소하였으나 관측된 절감률이 반복 측정 "
@@ -1614,7 +1628,7 @@ def _conclusion(doc: Doc, D: dict) -> list:
                    f"압축 강도가 높을수록 하락 폭이 커졌으며, 압축 조건이 "
                    f"통과한 태스크는 기준 조건 통과 태스크의 부분집합이었습니다.")
             if pspread is not None and abs(d) <= pspread:
-                txt += (f" 다만 이 하락 폭은 대조 측정에서 확인된 변동 범위"
+                txt += (f" 다만 이 하락 폭은 압축 없이 반복 측정에서 확인된 변동 범위"
                         f"(±{pspread * 100:.1f}%p) 내에 있어, **정확도 저하 "
                         f"경향은 관측되나 통계적으로 확정된 결과는 "
                         f"아닙니다.**")
@@ -1645,7 +1659,7 @@ def _conclusion(doc: Doc, D: dict) -> list:
                   "본 측정에서 통제되지 않았습니다."],
                  ["산문형 입력(과제 설명·문서)에 한정한 선택적 적용",
                   "해당 유형에서는 압축률 대비 정보 손실이 작습니다."],
-                 ["단순 절단(truncation) 대조군과의 비교 측정",
+                 ["단순 절단(truncation) 압축 없이 반복 측정과의 비교 측정",
                   "압축기 도입 비용을 정당화하려면 단순 기법 대비 우위가 "
                   "확인되어야 합니다."]])]
     B += ["후속 측정 계획",
@@ -1660,7 +1674,7 @@ def _conclusion(doc: Doc, D: dict) -> list:
                  ["적용 방식", "전체 일괄", "메시지 유형별 선택 적용"],
                  ["벤치마크", "Terminal Bench 2.1 단독",
                   "DeepSWE 공식 하네스 추가 (현재 미측정)"]]),
-          Note("시도 횟수 확대가 최우선입니다. 대조 측정에서 확인된 변동 폭이 "
+          Note("시도 횟수 확대가 최우선입니다. 압축 없이 반복 측정에서 확인된 변동 폭이 "
                "현재 관측된 효과 크기와 동일하므로, 반복 측정 없이는 표본을 "
                "늘려도 효과를 분리할 수 없습니다.")]
     return B
@@ -1736,10 +1750,10 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     # 언어를 나눠 돌리면 run 디렉터리가 갈리므로 여러 개를 받습니다.
     ap.add_argument("--run", type=Path, nargs="+", required=True,
-                    help="주 측정 run 디렉터리 (arms.json 이 있는 곳)")
+                    help="압축 조건 비교 run 디렉터리 (arms.json 이 있는 곳)")
     ap.add_argument("--jobs", type=Path, nargs="+", required=True)
     ap.add_argument("--control-run", type=Path, nargs="*", default=[],
-                    help="대조 측정 run 디렉터리")
+                    help="압축 없이 반복 측정 run 디렉터리")
     ap.add_argument("--control-jobs", type=Path, nargs="*", default=[])
     ap.add_argument("--swe-run", type=Path, help="DeepSWE run 디렉터리")
     ap.add_argument("--swe-jobs", type=Path, nargs="*", default=[])
@@ -1750,16 +1764,16 @@ def main() -> int:
     D = {}
     D["main"] = read_rollout(list(a.run), list(a.jobs))
     if not D["main"]:
-        print("✗ 주 측정 결과를 읽지 못했습니다", file=sys.stderr)
+        print("✗ 압축 조건 비교 결과를 읽지 못했습니다", file=sys.stderr)
         return 1
-    print(f"  주 측정   {len(D['main']['rows'])} trial")
+    print(f"  압축 조건 비교   {len(D['main']['rows'])} trial")
     D["proxy"] = read_proxy(list(a.run),
                             [x["name"] for x in D["main"]["by_arm"]])
 
     if a.control_run and a.control_jobs:
         D["control"] = read_rollout(list(a.control_run), list(a.control_jobs))
         if D["control"]:
-            print(f"  대조 측정 {len(D['control']['rows'])} trial")
+            print(f"  압축 없이 반복 측정 {len(D['control']['rows'])} trial")
     if a.swe_run and a.swe_jobs:
         D["swe"] = read_rollout(a.swe_run, list(a.swe_jobs))
         if D["swe"]:
@@ -1990,21 +2004,46 @@ def _compare(doc: Doc, D: dict) -> list:
                "DeepSWE 는 pass@1 이 0 인 구간에서도 f2p 로 진척도를 "
                "비교할 수 있습니다.")]
 
-    # 정확도 곡선 겹쳐 보기
-    band = sorted([a for a in m["by_arm"] if a["pass1"] is not None],
+    # 품질 곡선 겹쳐 보기.
+    #
+    # 두 벤치마크의 pass@1 을 그대로 겹치면 DeepSWE 선이 바닥(0)에 깔려
+    # 아무것도 읽히지 않습니다. 애초에 기준 조건의 절대 성적이 달라
+    # 절대값 비교는 뜻이 없습니다. 각자 **자기 기준 조건을 1.0 으로 둔
+    # 상대값**으로 그리면, 이 그림이 답해야 할 질문 — "어느 쪽이 압축에
+    # 더 민감한가" — 에 답하게 됩니다.
+    band = sorted([a for a in m["by_arm"] if a["rate"] is not None],
                   key=lambda a: -a["rate"])
     if len(band) > 1:
-        xs = [a["rate"] for a in band]
-        tb = [a["pass1"] for a in band]
-        se = [(sw_by.get(a["name"]) or {}).get("pass1") for a in band]
-        B += [Figure(doc.next_fig(),
-                     "압축률에 따른 정확도 — 두 벤치마크",
-                     line_chart(xs, [("Terminal Bench", tb),
-                                     ("DeepSWE", se)],
-                                "rate (유지 비율)", "pass@1"),
-                     "rate=1.0 은 압축 미적용입니다. 곡선이 겹치는 정도로 "
-                     "부하 규모가 압축 민감도에 미치는 영향을 볼 수 "
-                     "있습니다.")]
+        def norm(d, base, by_name):
+            f2p_of = lambda nm: mean([r.get("f2p") for r in d["rows"]  # noqa: E731
+                                      if r["arm"] == nm])
+            use_f2p = not any((a["pass1"] or 0) > 0 for a in d["by_arm"])
+            val = (lambda a: f2p_of(a["name"])) if use_f2p else (lambda a: a["pass1"])
+            bv = val(base)
+            if not bv:
+                return None, None
+            out = []
+            for a in band:
+                t = by_name.get(a["name"]) if by_name is not None else a
+                v = val(t) if t else None
+                out.append(v / bv if v is not None else None)
+            return out, ("f2p" if use_f2p else "pass@1")
+
+        tb, tb_ax = norm(m, mb, None)
+        se, se_ax = norm(sw, sb, sw_by)
+        if tb:
+            series = [(f"Terminal Bench ({tb_ax})", tb)]
+            if se:
+                series.append((f"DeepSWE ({se_ax})", se))
+            B += [Figure(doc.next_fig(),
+                         "압축률에 따른 품질 — 두 벤치마크 (각자 기준 = 1.0)",
+                         line_chart([a["rate"] for a in band], series,
+                                    "rate (유지 비율)", "자기 기준 대비"),
+                         f"기준 조건의 절대 성적이 달라(TB {tb_ax} "
+                         f"{pc(mb['pass1'], 1)} · DeepSWE {se_ax} "
+                         f"{pc(mean([r.get('f2p') for r in sw['rows'] if r['arm'] == sb['name']]), 1)}) "
+                         f"각자 자기 기준을 1.0 으로 두었습니다. **더 가파르게 "
+                         f"내려가는 쪽이 압축에 더 민감합니다.**")]
 
     # ── 7-3 압축 연산 비용 ──────────────────────────────────
     px_m, px_s = D.get("proxy") or {}, D.get("swe_proxy") or {}
@@ -2233,9 +2272,9 @@ def _brief_what(doc: Doc, D: dict) -> list:
               "                                        [테스트로 채점]")]
     rows = []
     for key, lbl, bm, purpose in (
-            ("main", "주 측정", "Terminal Bench 2.1", "정확도·토큰 비교"),
-            ("control", "대조 측정", "Terminal Bench 2.1", "반복 변동 추정"),
-            ("swe", "주 측정", "DeepSWE", "대규모 컨텍스트 검증")):
+            ("main", "압축 조건 비교", "Terminal Bench 2.1", "정확도·토큰 비교"),
+            ("control", "압축 없이 반복 측정", "Terminal Bench 2.1", "반복 변동 추정"),
+            ("swe", "압축 조건 비교", "DeepSWE", "대규모 컨텍스트 검증")):
         d = D.get(key)
         if not d:
             continue
@@ -2281,19 +2320,11 @@ def _brief_bench(doc: Doc, d: dict, D: dict, tag: str) -> list:
     band = sorted([a for a in d["by_arm"] if a["pass1"] is not None],
                   key=lambda a: -a["rate"])
     if len(band) > 1:
-        B += [Figure(doc.next_fig(),
-                     f"압축률에 따른 정확도와 토큰 — "
-                     f"{'DeepSWE' if is_swe else 'Terminal Bench'}",
-                     line_chart([a["rate"] for a in band],
-                                [("pass@1", [a["pass1"] for a in band]),
-                                 ("입력 토큰(기준 대비)",
-                                  [(a["in_tok"] / b["in_tok"])
-                                   if (a["in_tok"] and b["in_tok"]) else None
-                                   for a in band])],
-                                "rate (유지 비율)", "비율"),
-                     "rate=1.0 은 압축 미적용입니다. 두 선이 함께 내려가는 "
-                     "구간이 없으면, 정확도를 지키면서 비용을 줄일 수 "
-                     "없다는 뜻입니다.")]
+        fig = _rate_fig(doc, d, b,
+                        f"압축률에 따른 품질과 토큰 — "
+                        f"{'DeepSWE' if is_swe else 'Terminal Bench'}")
+        if fig:
+            B += [fig]
 
     # 태스크 단위로 토큰이 늘어난 사례 — 개수만 짚습니다.
     pairs = _paired(d, b)
@@ -2308,6 +2339,43 @@ def _brief_bench(doc: Doc, d: dict, D: dict, tag: str) -> list:
                    f"압축으로 손상된 컨텍스트가 재탐색을 유발해 절감분을 "
                    f"상쇄한 것으로 보입니다.")]
     return B
+
+
+def _rate_fig(doc: Doc, d: dict, b: dict, caption: str):
+    """압축률 곡선. **두 값을 기준 조건 = 1.0 으로 정규화**해 그립니다.
+
+    pass@1 은 절대값(0.64)이고 토큰은 기준 대비 비율(0.77)이라, 그대로
+    한 축에 겹치면 세로축에 이름을 붙일 수 없습니다. 둘 다 상대값으로
+    바꾸면 "무엇이 더 빨리 떨어지는가" 라는 질문에 답하는 그림이 됩니다.
+
+    pass@1 이 전 조건 0 이면(바닥 효과) 나눌 수가 없으므로 f2p 로
+    갈아탑니다. 어느 축을 썼는지는 캡션에 남깁니다.
+    """
+    band = sorted([a for a in d["by_arm"] if a["rate"] is not None],
+                  key=lambda a: -a["rate"])
+    if len(band) < 2:
+        return None
+    f2p_of = lambda nm: mean([r.get("f2p") for r in d["rows"]   # noqa: E731
+                              if r["arm"] == nm])
+    use_f2p = not any((a["pass1"] or 0) > 0 for a in d["by_arm"])
+    axis = "f2p" if use_f2p else "pass@1"
+    val = (lambda a: f2p_of(a["name"])) if use_f2p else (lambda a: a["pass1"])
+    bv = val(b)
+    if not bv:
+        return None
+    ys = [(val(a) / bv) if val(a) is not None else None for a in band]
+    ts = [(a["in_tok"] / b["in_tok"]) if (a["in_tok"] and b["in_tok"])
+          else None for a in band]
+    return Figure(
+        doc.next_fig(), f"{caption} (기준 조건 = 1.0)",
+        line_chart([a["rate"] for a in band],
+                   [(f"{axis} (기준 대비)", ys), ("입력 토큰 (기준 대비)", ts)],
+                   "rate (유지 비율)", "기준 조건 대비"),
+        f"rate=1.0 은 압축 미적용이며 두 선 모두 1.0 에서 출발합니다"
+        f"(기준 {axis} {pc(bv, 1)} · 입력 토큰 {num(b['in_tok'])}). "
+        f"토큰은 낮을수록 좋고 {axis} 는 낮을수록 나쁩니다. "
+        f"**두 선이 함께 내려가면 절감의 대가로 품질을 내주고 있다는 "
+        f"뜻입니다.**")
 
 
 def _brief_compare(doc: Doc, D: dict) -> list:
@@ -2350,7 +2418,7 @@ def _brief_limits(doc: Doc, D: dict) -> list:
         txt = (f"조건당 태스크 {n_t}종을 1회씩만 시도했습니다. 태스크 1건의 "
                f"성패가 pass@1 을 {100 / n_t:.1f}%p 움직입니다.")
         if pspread is not None:
-            txt += (f" 동일 조건을 반복한 대조 측정에서 실제 변동은 pass@1 "
+            txt += (f" 동일 조건을 반복한 압축 없이 반복 측정에서 실제 변동은 pass@1 "
                     f"±{pspread * 100:.1f}%p, 입력 토큰 ±{tspread * 100:.1f}% "
                     f"였으며, 이는 본 측정에서 관측된 변화와 같은 크기입니다.")
         B += [P(txt),
@@ -2377,7 +2445,7 @@ def _brief_reco(doc: Doc, D: dict) -> list:
                     "해당 유형은 압축률 대비 정보 손실이 작습니다."],
                    ["`keep_last` 확대 후 정확도 회복 지점 탐색",
                     "직전 컨텍스트 보존 범위의 영향이 통제되지 않았습니다."],
-                   ["단순 절단(truncation) 대조군과 비교",
+                   ["단순 절단(truncation) 압축 없이 반복 측정과 비교",
                     "압축기 도입 비용을 정당화하려면 단순 기법 대비 우위가 "
                     "필요합니다."],
                    ["태스크 수·시도 횟수 확대 후 재측정",
