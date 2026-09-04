@@ -217,7 +217,7 @@ git clone git@github.com:hijigoo/token-compression.git
 cd token-compression
 
 uv venv && uv pip install -r requirements.txt
-./scripts/setup_git.sh            # 노트북 출력 자동 제거 (아래에서 설명드립니다)
+./scripts/setup_git.sh            # 커밋 시 노트북 출력을 자동으로 지웁니다
 ```
 
 API가 필요한 랩(`03` 이후)을 돌리실 때는 자격증명을 넣어주세요. 변수 이름이
@@ -260,30 +260,6 @@ cd labs/data && python make_bilingual.py    # 한·영 이중언어
 | `sample-structured` | JSON·로그·표·XML 12건 | `01` |
 | `sample-long` | 7개 절 장문 8건, 정답은 한 절에만 | `02`, `03` |
 | `sample-bilingual` | 한·영 6쌍 12건. 같은 사실을 두 언어로 | `04` |
-
-## 노트북을 커밋하기 전에
-
-노트북 실행 결과에는 리소스 이름이나 응답 본문이 남기 쉽습니다. 그래서 push
-직전에 출력을 자동으로 비우도록 해 두었습니다.
-
-```bash
-./scripts/setup_git.sh
-```
-
-이 스크립트는 두 겹으로 막습니다.
-
-- **clean 필터** — `git add` 시점에 노트북 출력을 제거합니다
-- **pre-push 훅** — 그래도 남아 있으면 push를 멈춰 세웁니다
-
-훅이 막아섰다면 아래로 정리하신 뒤 다시 커밋해 주세요.
-
-```bash
-python scripts/strip_outputs.py labs/**/run.ipynb
-```
-
-> 예전에 이 훅이 **아무것도 검사하지 않으면서 통과만 하던** 적이 있었습니다.
-> 검사 코드를 고치셨다면 일부러 출력이 남은 노트북으로 한 번 막히는지
-> 확인해 보시길 권합니다.
 
 ## 더 읽어보실 곳
 
