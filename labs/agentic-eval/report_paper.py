@@ -539,9 +539,12 @@ def read_rollout(run_dirs, jobs: list[Path]) -> dict | None:
     # 회차 번호를 부여합니다. 이렇게 해야 "같은 태스크를 세 번 돌렸을 때
     # 결과가 갈리는가" 를 볼 수 있습니다.
     if len({a["base_url"] for a in arms}) == 1 and len(arms) > 1:
-        seen: dict[str, int] = {}
+        # 회차 번호는 **언어별로** 매깁니다. en 과 ko 를 한 줄로 세면
+        # 회차 4~6 이 사실상 ko 가 되어, 회차 간 차이에 언어 차이가 섞입니다.
+        # 그러면 이 값을 "같은 조건을 반복했을 때의 변동" 으로 쓸 수 없습니다.
+        seen: dict[tuple[str, str], int] = {}
         for r in sorted(rows, key=lambda x: x["trial"]):
-            k = r["task"]
+            k = (r["task"], r["lang"])
             seen[k] = seen.get(k, 0) + 1
             r["arm"] = f"회차 {seen[k]}"
         arms = [{"name": f"회차 {i}", "compressor": "none", "rate": 1.0,
@@ -2133,42 +2136,91 @@ def build_brief(D: dict) -> Doc:
 
 
 def _brief_verdict(doc: Doc, D: dict) -> None:
-    """결론을 맨 위에 둡니다. 요약판을 읽는 목적이 그것이기 때문입니다."""
-    m = D.get("main")
+    """결론을 맨 위에 둡니다. 요약판을 읽는 목적이 그것이기 때문입니다.
+
+    문장을 고정해 두면 표본이 늘었을 때 본문과 어긋납니다. 실제로 태스크를
+    8종에서 11종으로 늘리자 완만한 압축 구간의 성격이 바뀌었습니다. 그래서
+    **측정 변동과 대조해 판정**한 결과로 문장을 만듭니다.
+    """
+    m, sw = D.get("main"), D.get("swe")
     if not m:
         return
     b = _base_of(m)
     comp = [a for a in m["by_arm"] if a is not b and a["pass1"] is not None]
     pspread, tspread = _ctl_spread(D)
+    if not comp or b["pass1"] is None:
+        return
 
-    if comp and b["pass1"] is not None:
-        worst = min(comp, key=lambda a: a["pass1"])
-        keep = [a for a in comp if a["pass1"] >= b["pass1"] - 0.05]
-        tok = [(a, a["in_tok"] / b["in_tok"] - 1) for a in comp
-               if a["in_tok"] and b["in_tok"]]
-        saved = [x for x in tok if x[1] < -0.05]
+    band = sorted(comp, key=lambda a: -a["rate"])
+    worst = min(comp, key=lambda a: a["pass1"])
+    tok = {a["name"]: (a["in_tok"] / b["in_tok"] - 1)
+           for a in comp if a["in_tok"] and b["in_tok"]}
 
-        doc.abstract.append(
-            f"**결론: 현 시점에서 코딩 에이전트 프롬프트에 대한 전면 적용은 "
-            f"권고하지 않습니다.** 압축 강도를 높일수록 정확도가 하락했고"
-            f"(최대 {pp(worst['pass1'] - b['pass1'], 1)}), 정확도를 유지한 "
-            f"구간에서는 토큰이 줄지 않았습니다.")
-        if saved and keep:
-            hi = min(keep, key=lambda a: a["rate"])
-            hv = next((v for a, v in tok if a is hi), None)
+    # 측정 변동을 넘어선 하락만 "확실한 저하" 로 봅니다. 변동 안이면
+    # 방향은 보이되 크기를 단정할 수 없습니다.
+    lim = pspread if pspread is not None else 0.0
+    solid = [a for a in band if (b["pass1"] - a["pass1"]) > lim]
+
+    doc.abstract.append(
+        f"**압축 강도를 높일수록 정확도가 단조 하락했습니다.** 기준 조건 "
+        f"{pc(b['pass1'], 1)} 에서 가장 강한 압축(`rate {worst['rate']}`)의 "
+        f"{pc(worst['pass1'], 1)} 까지 "
+        f"{pp(worst['pass1'] - b['pass1'], 1)} 떨어졌으며, 같은 조건의 토큰 "
+        f"절감은 {rel(tok.get(worst['name'])) if worst['name'] in tok else '—'} "
+        f"였습니다.")
+
+    if solid:
+        edge = max(solid, key=lambda a: a["rate"])
+        safe = [a for a in band if a not in solid]
+        if safe:
+            hi = min(safe, key=lambda a: a["rate"])
+            hv = tok.get(hi["name"])
             doc.abstract.append(
-                f"정확도를 지킨 가장 강한 압축은 `rate {hi['rate']}` 였으나 "
-                f"입력 토큰은 {rel(hv) if hv is not None else '—'} 로 "
-                f"절감 효과가 없었고, 실제로 토큰이 크게 준 "
-                f"`{saved[0][0]['name']}`({rel(saved[0][1])})는 정확도가 "
-                f"{pp(saved[0][0]['pass1'] - b['pass1'], 1)} 하락했습니다. "
-                f"**측정 범위에서 정확도와 비용이 함께 개선되는 지점은 "
-                f"없었습니다.**")
-    if pspread is not None:
+                f"측정 변동(±{lim * 100:.1f}%p)을 넘어선 하락은 "
+                f"`rate {edge['rate']}` 이하에서 나타났습니다. 그보다 완만한 "
+                f"구간은 변동 안에 있으며, 그중 가장 강한 `rate {hi['rate']}` "
+                f"는 토큰을 {rel(hv) if hv is not None else '—'} 줄이면서 "
+                f"정확도 하락이 {pp(hi['pass1'] - b['pass1'], 1)} 였습니다. "
+                f"**다만 이 값 역시 변동 범위 안이라 이득을 확정할 수 "
+                f"없습니다.**")
+        else:
+            doc.abstract.append(
+                f"모든 압축 조건에서 측정 변동(±{lim * 100:.1f}%p)을 넘어선 "
+                f"하락이 관측되었습니다.")
+    else:
         doc.abstract.append(
-            f"단, 동일 조건 반복 측정에서 pass@1 이 ±{pspread * 100:.1f}%p "
-            f"변동했습니다. 하락 경향은 일관되나 **개별 수치의 크기는 현재 "
-            f"표본으로 확정할 수 없습니다.**")
+            f"다만 모든 조건의 하락 폭이 측정 변동(±{lim * 100:.1f}%p) 안에 "
+            f"있어, 경향은 보이나 크기를 확정할 수 없습니다.")
+
+    if sw:
+        swb = _base_of(sw)
+        swc = [a for a in sw["by_arm"] if a is not swb]
+        f2p_of = lambda nm: mean([r.get("f2p") for r in sw["rows"]   # noqa: E731
+                                  if r["arm"] == nm])
+        bf = f2p_of(swb["name"])
+        cf = [x for x in (f2p_of(a["name"]) for a in swc) if x is not None]
+        n_err = sum(a.get("n_err") or 0 for a in swc)
+        if bf is not None and cf:
+            txt = (f"컨텍스트가 "
+                   f"{swb['in_tok'] / b['in_tok']:.0f}배 큰 DeepSWE 에서는 "
+                   f"토큰이 실제로 감소했으나(최대 "
+                   f"{rel(min((a['in_tok'] / swb['in_tok'] - 1) for a in swc if a['in_tok'] and swb['in_tok']))}), "
+                   f"이슈 해결 진척도(f2p)가 {pc(bf, 1)} 에서 "
+                   f"{pc(max(cf), 1)} 이하로 떨어졌습니다.")
+            if n_err and not (swb.get("n_err") or 0):
+                txt += (f" 스텝 예산을 초과해 과제를 끝내지 못한 trial 이 "
+                        f"{n_err}건 발생했고 **전부 압축 조건**이었습니다.")
+            if swb["secs"] and any(a["secs"] for a in swc):
+                mx = max(a["secs"] for a in swc if a["secs"])
+                txt += (f" trial 소요 시간은 최대 {mx / swb['secs']:.0f}배로 "
+                        f"늘었습니다.")
+            doc.abstract.append(txt)
+
+    doc.abstract.append(
+        "**종합하면, 큰 폭의 토큰 절감은 정확도 저하를 동반했고, 정확도를 "
+        "지키는 완만한 구간의 이득은 측정 변동과 구분되지 않았습니다.** "
+        "현 시점에서 프롬프트 전면 적용은 권고하지 않으며, 아래 선택적 "
+        "적용을 검토하고 표본을 늘려 재측정할 것을 제안합니다.")
 
 
 def _brief_what(doc: Doc, D: dict) -> list:
