@@ -27,23 +27,45 @@ Terminal Bench 2.1 과 DeepSWE 를 `pier`(공식 러너) + Docker 격리로 돌�
 측정을 재현하거나 조건을 바꿔 돌리시려면
 [`labs/agentic-eval`](labs/agentic-eval/) 을 보십시오.
 
-## 처음 오셨다면
+## 두 갈래로 보시면 됩니다
 
-압축을 왜 하는지, 무엇이 어려운지부터 보시는 편이 빠릅니다.
+목적에 따라 들어가는 문이 다릅니다.
 
-| 순서 | 어디를 보시면 | 무엇을 얻으시나요 |
+| | 어디를 | 무엇을 |
 |---|---|---|
-| 1 | [`docs/llm-token-compression-2026.html`](docs/) | 기법 지형도를 한눈에 (브라우저로 열어보세요) |
-| 2 | [`labs/00-baseline`](labs/00-baseline/) | 실험 하네스가 어떻게 도는지 |
-| 3 | [`labs/01-lossless-structure`](labs/01-lossless-structure/) | 가장 안전한 압축부터 |
-| 4 | [`scripts/explore/`](scripts/explore/) | 원리를 손으로 익히는 노트북 5종 |
+| **원리를 익히고 싶다** | [`scripts/explore/`](scripts/explore/) | 노트북 5종. 토큰이 무엇인지부터 손으로 확인합니다 |
+| **기법을 비교하고 싶다** | [`labs/`](labs/) | 랩 7종. 같은 하네스로 절감과 손실을 함께 잽니다 |
+| **에이전트에서 되는지 보고 싶다** | [`labs/agentic-eval`](labs/agentic-eval/) | 공식 벤치마크로 pass@1 을 잽니다 |
 
-랩마다 `run.ipynb`가 있습니다. 코드를 읽기 전에 노트북을 먼저 돌려보시면
-무엇을 하는 랩인지 훨씬 빨리 감이 잡히실 겁니다.
+### 원리부터 — `scripts/explore/`
+
+압축 이전에 **토큰이 무엇이고 무엇이 비용을 만드는지**를 먼저 봅니다.
+번호대로 따라가시면 됩니다.
+
+| 노트북 | 무엇을 |
+|---|---|
+| `01_foundry_token_test` | 같은 문장이 언어·형식에 따라 토큰 수가 얼마나 달라지는지 |
+| `02_lossless_compression` | 의미를 안 버리고 줄일 수 있는 한계 |
+| `03_conversation_compression` | 대화가 길어질 때 무엇이 먼저 커지는지 |
+| `04_reference_handle` | 원문을 밖에 두고 핸들만 남기는 방식 |
+| `05_token_pruning` | 토큰을 골라 지울 때 무엇이 깨지는지 |
+
+```bash
+cd scripts/explore && jupyter lab 01_foundry_token_test.ipynb
+```
+
+### 기법 비교 — `labs/`
+
+랩 하나가 기법 하나입니다. 전부 같은 하네스를 쓰므로 **절감과 보존율을
+같은 방식으로** 잽니다. 랩마다 `run.ipynb` 가 있어 코드를 읽기 전에
+돌려보실 수 있습니다.
 
 ```bash
 cd labs/01-lossless-structure && jupyter lab run.ipynb
 ```
+
+번호는 **안전한 것부터** 붙였습니다. `01`·`02` 는 원문을 되돌릴 수 있고,
+`03` 부터는 버립니다. 아래 표에서 되돌리기 열을 함께 보십시오.
 
 ## 랩 현황
 
@@ -56,6 +78,7 @@ cd labs/01-lossless-structure && jupyter lab run.ipynb
 | [`04-llmlingua`](labs/04-llmlingua/) | 토큰 프루닝 (3형제 · 한·영) | 48.1% | 79.2% | **0%** | 66.7% | 불가 | torch |
 | `05-headroom` | CCR 라이브러리 | — | — | — | — | — | pip |
 | `06-opencode` | 에이전트 세션 압축 | — | — | — | — | — | bun/npm |
+| [`agentic-eval`](labs/agentic-eval/) | **종단 평가자** — 알고리즘이 아닙니다 | — | — | — | — | — | Docker |
 
 각 랩의 **권장 조건** 기준입니다. 지표는 이런 뜻입니다.
 
@@ -125,40 +148,16 @@ cd labs/01-lossless-structure && jupyter lab run.ipynb
 
 | 경로 | 무엇이 들어 있나요 |
 |---|---|
-| `labs/NN-*/` | 압축 알고리즘 하나씩. 숫자는 읽는 순서입니다 |
+| `scripts/explore/` | **원리를 익히는 노트북 5종.** 여기부터 보셔도 됩니다 |
+| `labs/NN-*/` | 압축 알고리즘 하나씩. 숫자는 안전한 순서입니다 |
+| `labs/agentic-eval/` | **종단 평가자.** 공식 벤치마크로 pass@1 을 잽니다 |
 | `labs/kit/` | 랩 공통 기반. 토큰 계산·지표·기록을 여기로 모았습니다 |
 | `labs/data/` | 공유 입력 코퍼스. **한 번 넣으면 바꾸지 않습니다** |
 | `labs/*/configs/` | 조건 하나가 파일 하나입니다 |
-| `labs/agentic-eval/` | 종단 평가자. 알고리즘이 아니라서 번호가 없습니다 |
-| `runs/<랩>/<설정>/<시각>/` | 실행 결과가 전부 여기 쌓입니다 |
-| `compare/` | `runs/` 끼리 비교합니다. **정답률 평가**가 여기 있습니다 |
-| `scripts/explore/` | 탐색용 노트북. 재현이 필요해지면 `labs/`로 옮깁니다 |
-| `docs/` | 설명 문서 (HTML) |
-
-## 설계 원칙 세 가지
-
-지키다 보면 불편할 때도 있지만, 각각 이유가 있어서 두었습니다.
-
-### 1. 랩끼리는 서로를 import 하지 않습니다
-
-랩 하나를 고쳤을 때 다른 랩이 조용히 따라 바뀌는 상황을 막으려는 것입니다.
-예를 들어 `agentic-eval`은 `05-headroom`을 import하지 않고, Headroom을 별도
-프로세스로 띄운 다음 URL로만 이야기합니다.
-
-다만 [`labs/kit`](labs/kit/)은 예외입니다. 랩 → kit 단방향이라 순환이 생기지
-않고, 지표 코드가 랩마다 갈라지는 편이 훨씬 위험하기 때문입니다. 자세한 사정은
-kit README에 적어 두었습니다.
-
-### 2. 폴더를 늘리지 않습니다
-
-라이브러리를 추가하실 때는 파일 하나, 실험을 추가하실 때는 yaml 하나면
-충분하도록 만들어 두었습니다. 폴더가 늘어나면 어디를 봐야 할지 알기
-어려워집니다.
-
-### 3. 비교 가능성을 가장 앞에 둡니다
-
-같은 입력, 같은 시드, 같은 측정 방식이 아니면 숫자를 나란히 놓을 수 없습니다.
-그래서 실행할 때마다 kit 버전과 토큰 측정 방식을 결과에 함께 기록합니다.
+| `reports/` | **정리된 측정 결과.** `analysis/` 가 대표 보고서입니다 |
+| `runs/` | 실행 원본이 쌓입니다 (커밋 제외) |
+| `compare/` | `runs/` 끼리 비교합니다 |
+| `docs/` | 보조 설명 문서 (HTML) |
 
 ## 두 가지 평가 축
 
@@ -168,13 +167,21 @@ kit README에 적어 두었습니다.
 | | `labs/00~06` | [`labs/agentic-eval`](labs/agentic-eval/) |
 |---|---|---|
 | 무엇을 묻나요 | 압축률 대비 정보 손실 | 압축된 컨텍스트로 **실제 작업을 해내는가** |
-| 입력 | `labs/data/` 코퍼스 | DeepSWE 태스크 (컨테이너 런타임) |
-| 지표 | 토큰 수, 정답 보존율 | pass@1, 입력 토큰 |
+| 입력 | `labs/data/` 코퍼스 | Terminal Bench 2.1 · DeepSWE 태스크 |
+| 실행 | 파이썬 프로세스 | 공식 러너(`pier`) + Docker 격리 |
+| 채점 | 정답 문자열 보존 여부 | 태스크에 포함된 테스트 |
+| 지표 | 토큰 수, 정답 보존율 | pass@1, f2p/p2p, 입력 토큰, 스텝 |
 | 비용 | 초~분 | 시간~일 (Docker, 유료 API) |
 
 앞쪽 축은 값싸고 빠르게 **명백히 깨진 것**을 걸러냅니다. 뒤쪽 축은 느리고
 비싸지만 실전에 가까운 신호를 줍니다. 앞에서 거르고 뒤에서 확인하는 순서로
 쓰시면 좋습니다.
+
+> **두 축이 어긋날 수 있습니다.** 압축기가 문자열은 잘 보존하는데 에이전트
+> 정확도는 떨어지는 경우가 실제로 관측되었습니다. 손상된 컨텍스트를
+> 에이전트가 반복 탐색하면서 호출이 늘고, 그만큼 토큰도 되레 늘어나기
+> 때문입니다. 앞쪽 축만 보고 도입을 결정하지 마십시오 —
+> [`reports/analysis/brief.html`](reports/analysis/) 에 수치가 있습니다.
 
 ## 환경 준비
 
@@ -197,6 +204,19 @@ cd labs && cp ../scripts/explore/.env .env
 
 랩별 의존성은 `labs/*/requirements.txt`로 나눠 두었습니다. `04-llmlingua`처럼
 torch 핀이 걸리는 랩이 다른 랩과 충돌하지 않게 하려는 것입니다.
+
+### 종단 평가는 준비가 더 필요합니다
+
+[`labs/agentic-eval`](labs/agentic-eval/) 은 Docker 로 에이전트를 실제
+실행하므로 별도 준비가 있습니다. **`patch_pier.py` 와
+`PIER_EXTRA_SAFE_PORTS` 를 빠뜨리면 압축 조건이 첫 호출부터 실패**하는데
+에러 메시지가 친절하지 않습니다. 자세한 내용은 그쪽 README 를 보십시오.
+
+```bash
+cd labs/agentic-eval
+./setup.sh                                   # 데이터셋 클론 + venv
+./.venv/bin/python patch_pier.py             # pier 패치 2종
+```
 
 ### 코퍼스 만들기
 
@@ -290,7 +310,8 @@ cd labs && cp .env.example .env
 
 | 문서 | 내용 |
 |---|---|
+| [`reports/README.md`](reports/) | 어떤 보고서가 있고 어떻게 다시 만드나 |
+| [`labs/agentic-eval/README.md`](labs/agentic-eval/) | 종단 평가 실행법, 조용히 오염되는 지점들 |
 | [`labs/kit/README.md`](labs/kit/) | 랩이 지켜야 할 계약, 결과 파일 구조 |
 | [`labs/data/README.md`](labs/data/) | 코퍼스를 추가하는 방법과 불변 규칙 |
-| [`labs/agentic-eval/README.md`](labs/agentic-eval/) | 종단 평가 실행법과 오염 지점 |
-| [`docs/deepswe-guide.html`](docs/) | DeepSWE·Pier 동작 원리 |
+| [`scripts/explore/`](scripts/explore/) | 노트북 5종 (`nbtools.py` 가 공통 도우미) |

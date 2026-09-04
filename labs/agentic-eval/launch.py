@@ -355,6 +355,14 @@ def wait_healthy(port: int, proc: subprocess.Popen, name: str, timeout: float = 
 # 헤매기 시작하면 끝없이 늘어나므로 상한이 필요하다. 60 은 DeepSWE 기준
 # 조건의 관측치(35 스텝)에 여유를 얹은 값이다 — 정상적으로 푸는 경로는
 # 막지 않으면서, 헤매는 경로는 끊는다.
+# trial 하나가 에이전트 단계에서 쓸 수 있는 최대 시간(초).
+#
+# 관측치: Terminal Bench 기준 조건이 60~80초, DeepSWE 기준 조건이 460초.
+# 압축 조건은 3,900~9,300초까지 늘어났다. 1,800초는 정상 경로는 살리고
+# 멈춘 경로만 끊는 선이다. DeepSWE 압축 조건 일부가 여기 걸리지만, 그건
+# "예산 안에 못 끝냈다" 는 결과이지 측정 실패가 아니다.
+AGENT_TIMEOUT_SEC = 1800.0
+
 _STEP_LIMIT_YAML = "agent:\n  step_limit: 60\n"
 
 
@@ -383,6 +391,19 @@ def build_pier_config(spec: dict, arms: list[dict], public_host: str,
             # "주어진 예산 안에 못 끝냈다" 는 뜻이라 정확도 지표로서
             # 타당하다 — 실제 운영에서도 예산은 유한하다.
             "kwargs": {"config_yaml": _STEP_LIMIT_YAML},
+            # ★ trial 시간 상한.
+            #
+            # 태스크의 task.toml 에도 timeout_sec 가 있지만, 에이전트가 모델
+            # 응답을 기다리며 멈춰 서면 그 상한이 걸리지 않는 경우가 있다.
+            # 실제로 db-wal-recovery 한 건이 92분간 아무 출력 없이 멈춰
+            # 파이프라인 전체를 막았다. 그동안 뒤의 롤아웃이 통째로 밀린다.
+            #
+            # 여기서 거는 상한은 **모든 조건에 동일**하다. 압축 조건에만
+            # 걸면 비교가 깨진다. 상한에 걸린 trial 은 실패로 집계되는데,
+            # 이는 "주어진 시간 안에 못 끝냈다" 는 뜻이라 정확도 지표로서
+            # 타당하다 — 실제 운영에서도 시간은 유한하다.
+            "override_timeout_sec": AGENT_TIMEOUT_SEC,
+            "max_timeout_sec": AGENT_TIMEOUT_SEC,
             "env": {
                 "OPENAI_API_KEY": "${OPENAI_API_KEY}",
                 "OPENAI_BASE_URL": base_url,

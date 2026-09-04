@@ -555,7 +555,13 @@ def read_rollout(run_dirs, jobs: list[Path]) -> dict | None:
         band = [r for r in rows if r["arm"] == a["name"]]
         if not band:
             continue
-        rw = [r["reward"] for r in band if r["reward"] is not None]
+        # 에이전트가 예산(스텝 상한) 안에 끝내지 못하면 pier 가 예외로
+        # 기록하고 reward 가 비어 있습니다. 이것을 집계에서 빼면 "끝낸
+        # trial 만 모아 정확도를 계산" 하는 셈이라 압축 조건이 실제보다
+        # 좋게 보입니다. **끝내지 못한 것도 실패**로 셉니다.
+        rw = [(r["reward"] or 0) for r in band
+              if r["reward"] is not None or r.get("error")]
+        n_err = sum(1 for r in band if r.get("error"))
         # 프록시 기록은 run 마다 따로 남으므로 합산합니다.
         px = {"before": 0, "after": 0, "n_compress": 0}
         for rd in run_dirs:
@@ -565,6 +571,7 @@ def read_rollout(run_dirs, jobs: list[Path]) -> dict | None:
         out["by_arm"].append({
             "name": a["name"], "compressor": a["compressor"], "rate": a["rate"],
             "n": len(band), "n_pass": sum(1 for x in rw if x > 0),
+            "n_err": n_err,
             "pass1": (sum(1 for x in rw if x > 0) / len(rw)) if rw else None,
             "in_tok": mean([r["in_tok"] for r in band]),
             "out_tok": mean([r["out_tok"] for r in band]),
@@ -701,8 +708,17 @@ def _incomplete(doc: Doc, D: dict) -> None:
         d = D.get(key)
         if not d:
             continue
+        # 계획값은 run 마다 스냅샷이 따로 남습니다. 언어를 나눠 돌리거나
+        # 태스크를 나중에 추가하면 각 스냅샷은 자기 몫만 아므로 합집합으로
+        # 잡습니다. (최신 run 하나만 보면 그 run 의 태스크 수가 전체 계획인
+        # 것처럼 잘못 표시됩니다.)
         cnt = [a["n"] for a in d["by_arm"]]
-        n_plan = planned_tasks(d["run_dir"]) or len({r["task"] for r in d["rows"]})
+        n_plan = len({r["task"] for r in d["rows"]})
+        n_lang = len({r["lang"] for r in d["rows"]})
+        for rd in d.get("run_dirs") or [d["run_dir"]]:
+            n_plan = max(n_plan, planned_tasks(rd) or 0)
+            n_lang = max(n_lang, len(planned_langs(rd)))
+        n_plan *= max(1, n_lang)
         if len(set(cnt)) > 1 or (cnt and min(cnt) < n_plan):
             warn.append(f"{label}(조건별 {min(cnt)}~{max(cnt)}/{n_plan} trial)")
     if warn:
@@ -801,18 +817,35 @@ def _abstract(doc: Doc, D: dict) -> None:
 
     if sw:
         swb = _base_of(sw)
-        px = (D.get("swe_proxy") or {})
-        lat = [v["lat_p50"] for v in px.values() if v.get("lat_p50")]
-        extra = ""
-        if lat and swb["in_tok"] and b["in_tok"]:
-            extra = (f" DeepSWE 는 누적 입력이 Terminal Bench 의 "
-                     f"{swb['in_tok'] / b['in_tok']:.0f}배 규모이며, 압축 "
-                     f"연산 지연도 호출당 중앙 {max(lat) / 1000:.0f}초로 "
-                     f"증가하였습니다. 압축 오버헤드가 컨텍스트 크기에 "
-                     f"비례하므로, 압축이 가장 필요한 대규모 컨텍스트에서 "
-                     f"지연 비용도 가장 커집니다.")
-        doc.abstract.append(
-            f"부하 규모가 다른 두 벤치마크를 함께 측정하였습니다.{extra}")
+        swc = [a2 for a2 in sw["by_arm"] if a2 is not swb]
+        parts = []
+        if swb["in_tok"] and b["in_tok"]:
+            parts.append(f"DeepSWE 는 누적 입력이 Terminal Bench 의 "
+                         f"{swb['in_tok'] / b['in_tok']:.0f}배 규모입니다")
+
+        # DeepSWE 는 pass@1 이 전 조건 0 이라 f2p 로 봐야 차이가 보입니다.
+        f2p_of = lambda nm: mean([r.get("f2p") for r in sw["rows"]   # noqa: E731
+                                  if r["arm"] == nm])
+        bf, cf = f2p_of(swb["name"]), [f2p_of(a2["name"]) for a2 in swc]
+        cf = [x for x in cf if x is not None]
+        if bf is not None and cf:
+            parts.append(f"이 규모에서는 토큰이 실제로 감소했으나"
+                         f"(최대 "
+                         f"{rel(min((a2['in_tok'] / swb['in_tok'] - 1) for a2 in swc if a2['in_tok'] and swb['in_tok']))}"
+                         f"), 이슈 해결 진척도(f2p)가 {pc(bf, 1)} 에서 "
+                         f"{pc(max(cf), 1)} 이하로 떨어졌습니다")
+        n_err = sum(a2.get("n_err") or 0 for a2 in swc)
+        if n_err and not (swb.get("n_err") or 0):
+            parts.append(f"압축 조건에서만 스텝 예산을 초과해 과제를 끝내지 "
+                         f"못한 trial 이 {n_err}건 발생했습니다")
+        if swb["secs"] and any(a2["secs"] for a2 in swc):
+            mx = max(a2["secs"] for a2 in swc if a2["secs"])
+            parts.append(f"trial 소요 시간은 최대 "
+                         f"{mx / swb['secs']:.0f}배로 늘었습니다")
+        if parts:
+            doc.abstract.append(
+                "부하 규모가 다른 두 벤치마크를 함께 측정하였습니다. "
+                + ". ".join(parts) + ".")
 
     if pspread is not None:
         doc.abstract.append(
@@ -1800,6 +1833,7 @@ def _swe(doc: Doc, D: dict) -> list:
             f"`{a['name']}`", f"{a['n_pass']}/{a['n']}", pc(a["pass1"], 1),
             pc(f2p, 1) if f2p is not None else "—",
             pc(p2p, 1) if p2p is not None else "—",
+            str(a.get("n_err") or 0),
             num(a["in_tok"]),
             "기준" if is_b else (rel(a["in_tok"] / b["in_tok"] - 1)
                                 if (a["in_tok"] and b["in_tok"]) else "—"),
@@ -1807,17 +1841,35 @@ def _swe(doc: Doc, D: dict) -> list:
             f"{a['secs']:.0f}" if a["secs"] else "—"])
     B += ["종합 결과",
           Table(doc.next_table(), "DeepSWE 조건별 성능 (trial 평균)",
-                ["조건", "통과 / 완료", "pass@1", "f2p", "p2p", "입력 토큰",
-                 "토큰 기준차", "스텝", "소요(초)"], rows,
-                align="lrrrrrrrr"),
-          Note("**통과 / 완료** 의 분모는 완료된 trial 수입니다. 태스크당 "
-               "1회만 시도합니다. "
+                ["조건", "통과 / 시도", "pass@1", "f2p", "p2p", "예산 초과",
+                 "입력 토큰", "토큰 기준차", "스텝", "소요(초)"], rows,
+                align="lrrrrrrrrr"),
+          Note("**예산 초과** 는 에이전트가 스텝 상한(60회) 안에 과제를 "
+               "끝내지 못해 중단된 trial 수입니다. **실패로 집계**합니다 — "
+               "제외하면 끝낸 trial 만 모아 정확도를 재는 셈이 되어 압축 "
+               "조건이 실제보다 좋게 보입니다. "
                "**f2p**(fail-to-pass) 는 이슈 해결을 위해 통과시켜야 하는 "
                "테스트의 통과 비율이고, **p2p**(pass-to-pass) 는 원래 "
                "통과하던 테스트를 유지한 비율입니다. pass@1 은 두 가지가 "
                "모두 충족될 때만 1점이므로, 0점이어도 f2p 로 진척도를 "
                "비교할 수 있습니다. **토큰 기준차** 는 압축 미적용 조건 "
                "대비 입력 토큰의 증감을 상대 비율(%)로 표기한 것입니다.")]
+
+    # 예산 초과가 압축 조건에만 몰리는지 봅니다. 그렇다면 "정확도가 조금
+    # 떨어졌다" 가 아니라 "아예 끝내지 못했다" 는 뜻이라 성격이 다릅니다.
+    errs = [(a["name"], a.get("n_err") or 0, a["n"]) for a in sw["by_arm"]]
+    tot_err = sum(e for _, e, _ in errs)
+    if tot_err:
+        base_err = next((e for n, e, _ in errs if n == b["name"]), 0)
+        comp_err = tot_err - base_err
+        B += [P(f"**예산 초과가 {tot_err}건 발생했습니다"
+                + (f" — 전부 압축 조건입니다" if base_err == 0 and comp_err
+                   else f" (기준 조건 {base_err}건, 압축 조건 {comp_err}건)")
+                + ".** 스텝 상한은 전 조건 동일하게 60회를 적용했으므로, "
+                "압축 조건이 같은 예산 안에 과제를 끝내지 못했다는 뜻입니다. "
+                "정확도가 조금 낮아진 것과는 성격이 다릅니다 — 압축으로 "
+                "손상된 컨텍스트를 에이전트가 반복 탐색하면서 예산을 "
+                "소진했습니다.")]
 
     names = [a["name"] for a in sw["by_arm"]]
     f2ps = []
@@ -1987,31 +2039,67 @@ def _compare(doc: Doc, D: dict) -> list:
                        "따져야 합니다.")]
 
     # ── 7-4 종합 ────────────────────────────────────────────
-    rows = []
-    for lbl, d, base in (("Terminal Bench 2.1", m, mb), ("DeepSWE", sw, sb)):
-        comp = [a for a in d["by_arm"] if a is not base
-                and a["pass1"] is not None]
-        if not comp or base["pass1"] is None:
-            continue
-        drop = min(a["pass1"] - base["pass1"] for a in comp)
-        toks = [(a["in_tok"] / base["in_tok"] - 1) for a in comp
-                if a["in_tok"] and base["in_tok"]]
-        keep = [a for a in comp if a["pass1"] >= base["pass1"] - 0.05]
-        rows.append([lbl, pc(base["pass1"], 1), pp(drop, 1),
-                     rel(min(toks)) if toks else "—",
-                     (f"`rate {min(keep, key=lambda a: a['rate'])['rate']}`"
-                      if keep else "없음")])
+    # pass@1 이 전 조건 0 이면(바닥 효과) 그 축으로는 아무것도 비교할 수
+    # 없습니다. DeepSWE 가 그런 상태라 f2p 로 갈아탑니다. 축이 다르다는
+    # 사실을 표에 드러내야 두 행을 같은 지표로 오해하지 않습니다.
+    rows, note = _summary_rows([("Terminal Bench 2.1", m, mb),
+                                ("DeepSWE", sw, sb)])
     if rows:
         B += ["종합",
               Table(doc.next_table(), "벤치마크별 요약",
-                    ["벤치마크", "기준 pass@1", "최대 정확도 하락",
-                     "최대 토큰 절감", "정확도 유지 한계"],
-                    rows, align="lrrrl"),
-              Note("‘정확도 유지 한계’ 는 기준 조건 대비 pass@1 하락이 "
-                   "5%p 이내였던 가장 강한 압축 조건입니다. ‘없음’ 은 "
-                   "측정 범위의 모든 압축 조건에서 그 기준을 넘는 하락이 "
-                   "관측되었다는 뜻입니다.")]
+                    ["벤치마크", "지표", "기준값", "최대 하락",
+                     "최대 토큰 절감", "품질 유지 한계"],
+                    rows, align="llrrrl"),
+              Note(note)]
     return B
+
+
+def _summary_rows(sets, with_tok: bool = False):
+    """벤치마크별 한 줄 요약.
+
+    pass@1 이 전 조건 0 이면(바닥 효과) 그 축으로는 아무것도 비교할 수
+    없으므로 부분 진척도인 f2p 로 갈아탑니다. 축이 바뀐 사실을 각주에
+    남겨야 두 행을 같은 지표로 오해하지 않습니다.
+    """
+    rows, floored = [], []
+    for lbl, d, base in sets:
+        if not d or not base:
+            continue
+        comp = [a for a in d["by_arm"] if a is not base]
+        if not comp:
+            continue
+        f2p_of = lambda nm: mean([r.get("f2p") for r in d["rows"]  # noqa: E731
+                                  if r["arm"] == nm])
+        use_f2p = not any((a["pass1"] or 0) > 0 for a in d["by_arm"])
+        if use_f2p:
+            floored.append(lbl)
+            bv, cv = f2p_of(base["name"]), [(a, f2p_of(a["name"])) for a in comp]
+        else:
+            bv, cv = base["pass1"], [(a, a["pass1"]) for a in comp]
+        cv = [(a, v) for a, v in cv if v is not None]
+        if bv is None or not cv:
+            continue
+        toks = [(a["in_tok"] / base["in_tok"] - 1) for a in comp
+                if a["in_tok"] and base["in_tok"]]
+        keep = [a for a, v in cv if v >= bv - 0.05]
+        row = [lbl]
+        if with_tok:
+            row.append(num(base["in_tok"]))
+        row += ["f2p" if use_f2p else "pass@1", pc(bv, 1),
+                pp(min(v - bv for _, v in cv), 1),
+                rel(min(toks)) if toks else "—",
+                (f"`rate {min(keep, key=lambda a: a['rate'])['rate']}`"
+                 if keep else "**없음**")]
+        rows.append(row)
+    note = ("‘품질 유지 한계’ 는 기준 조건 대비 지표 하락이 5%p 이내였던 "
+            "가장 강한 압축 조건입니다. ‘없음’ 은 측정 범위의 모든 압축 "
+            "조건에서 그보다 큰 하락이 관측되었다는 뜻입니다.")
+    if floored:
+        note += (f" **{', '.join(floored)} 는 전 조건 pass@1 이 0 이므로"
+                 f"(바닥 효과) 완전 해결 여부로는 비교할 수 없어, 부분 "
+                 f"진척도인 f2p 를 지표로 사용했습니다.** 두 행의 지표가 "
+                 f"다르므로 값을 직접 견주지 마십시오.")
+    return rows, note
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -2178,28 +2266,13 @@ def _brief_compare(doc: Doc, D: dict) -> list:
         B += [P(f"두 벤치마크는 같은 압축기·조건·최종 모델을 썼고 **부하 "
                 f"규모만 다릅니다.** DeepSWE 의 누적 입력이 Terminal Bench 의 "
                 f"**{sb['in_tok'] / mb['in_tok']:.0f}배**입니다.")]
-    rows = []
-    for lbl, d, base in (("Terminal Bench 2.1", m, mb), ("DeepSWE", sw, sb)):
-        comp = [a for a in d["by_arm"] if a is not base
-                and a["pass1"] is not None]
-        if not comp or base["pass1"] is None:
-            continue
-        drop = min(a["pass1"] - base["pass1"] for a in comp)
-        toks = [(a["in_tok"] / base["in_tok"] - 1) for a in comp
-                if a["in_tok"] and base["in_tok"]]
-        keep = [a for a in comp if a["pass1"] >= base["pass1"] - 0.05]
-        rows.append([lbl, num(base["in_tok"]), pc(base["pass1"], 1),
-                     pp(drop, 1), rel(min(toks)) if toks else "—",
-                     (f"`rate {min(keep, key=lambda a: a['rate'])['rate']}`"
-                      if keep else "**없음**")])
+    rows, note = _summary_rows([("Terminal Bench 2.1", m, mb),
+                                ("DeepSWE", sw, sb)], with_tok=True)
     if rows:
         B += [Table(doc.next_table(), "벤치마크별 요약",
-                    ["벤치마크", "기준 입력 토큰", "기준 pass@1",
-                     "최대 정확도 하락", "최대 토큰 절감", "정확도 유지 한계"],
-                    rows, align="lrrrrl"),
-              Note("‘정확도 유지 한계’ 는 pass@1 하락이 5%p 이내였던 가장 강한 "
-                   "압축 조건입니다. ‘없음’ 은 모든 압축 조건에서 그보다 큰 "
-                   "하락이 관측되었다는 뜻입니다.")]
+                    ["벤치마크", "기준 입력 토큰", "지표", "기준값",
+                     "최대 하락", "최대 토큰 절감", "품질 유지 한계"],
+                    rows, align="lrlrrrl"), Note(note)]
 
     px_m, px_s = D.get("proxy") or {}, D.get("swe_proxy") or {}
     lat_m = [v["lat_p50"] for v in px_m.values() if v.get("lat_p50")]
