@@ -205,6 +205,7 @@ def line_chart(xs: list, series: list, xlabel: str, ylabel: str,
              f'text-anchor="middle">{_esc(ylabel)}</text>')
 
     DASH = ["", "5 3", "2 2", "8 3"]
+    labels: list = []
     for i, (nm, ys) in enumerate(series):
         pts = [(X(x), Y(y)) for x, y in zip(xs, ys) if y is not None]
         if len(pts) < 2:
@@ -216,7 +217,17 @@ def line_chart(xs: list, series: list, xlabel: str, ylabel: str,
         for x, y in pts:
             o.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="2.6" '
                      f'fill="{GRAY[i % len(GRAY)]}"/>')
-        o.append(f'<text x="{pts[-1][0] + 7:.1f}" y="{pts[-1][1] + 4:.1f}" '
+        labels.append([pts[-1][0] + 7, pts[-1][1] + 4, nm])
+
+    # 두 선이 비슷한 값으로 끝나면 라벨이 겹쳐 읽을 수 없습니다. 위아래로
+    # 밀어 떼어 놓습니다(그림 밖으로 나가지 않는 선에서).
+    labels.sort(key=lambda L: L[1])
+    for k in range(1, len(labels)):
+        gap = labels[k][1] - labels[k - 1][1]
+        if gap < 14:
+            labels[k][1] = min(h - 6, labels[k - 1][1] + 14)
+    for lx, ly, nm in labels:
+        o.append(f'<text x="{lx:.1f}" y="{ly:.1f}" '
                  f'class="tick">{_esc(nm)}</text>')
     o.append("</svg>")
     return "".join(o)
@@ -1343,7 +1354,8 @@ def _results(doc: Doc, D: dict) -> list:
             B += [Figure(doc.next_fig(),
                          "언어별 압축률–정확도 곡선 (각 언어의 기준 = 1.0)",
                          line_chart([a["rate"] for a in band_arms], series,
-                                    "rate (유지 비율)", "자기 언어 기준 대비"),
+                                    "rate (유지 비율)",
+                                    "자기 언어 기준 대비 (배수)", yfmt=lambda v: f"{v:.2f}×"),
                          "두 선이 비슷하게 내려가면 언어와 무관하게 같은 "
                          "경향이라는 뜻입니다.")]
 
@@ -1438,12 +1450,15 @@ def _analysis(doc: Doc, D: dict) -> list:
                            [(a["in_tok"] / b["in_tok"]) if
                             (a["in_tok"] and b["in_tok"]) else None
                             for a in band])],
-                         "rate (유지 비율)", "기준 조건 대비"),
-                     f"rate=1.0 은 압축 미적용 조건이며 두 선 모두 1.0 에서 "
-                     f"출발합니다(기준 pass@1 {pc(b['pass1'], 1)} · 입력 토큰 "
-                     f"{num(b['in_tok'])}). 아래로 내려갈수록 기준보다 "
-                     f"낮다는 뜻입니다 — 토큰은 낮을수록 좋고 pass@1 은 "
-                     f"낮을수록 나쁩니다. **두 선이 함께 내려가면 절감의 "
+                         "rate (유지 비율)", "기준 조건 대비 (배수)",
+                         yfmt=lambda v: f"{v:.2f}×"),
+                     f"세로축은 **기준 조건을 1.00× 로 둔 배수**입니다. "
+                     f"바로 위 종합 표의 `pass@1` 과 `입력 토큰` 열을 각각 "
+                     f"기준 조건 값(pass@1 {pc(b['pass1'], 1)} · 입력 토큰 "
+                     f"{num(b['in_tok'])})으로 나눈 것입니다. 예를 들어 "
+                     f"0.50× 는 기준의 절반이라는 뜻이며, pass@1 이 50% 라는 "
+                     f"뜻이 **아닙니다**. 토큰은 낮을수록 좋고 pass@1 은 "
+                     f"낮을수록 나쁘므로, **두 선이 함께 내려가면 절감의 "
                      f"대가로 정확도를 내주고 있다는 뜻입니다.**")]
         B += [Figure(doc.next_fig(),
                      "압축률과 정확도의 상충 관계",
@@ -2112,7 +2127,8 @@ def _compare(doc: Doc, D: dict) -> list:
             B += [Figure(doc.next_fig(),
                          "압축률에 따른 품질 — 두 벤치마크 (각자 기준 = 1.0)",
                          line_chart([a["rate"] for a in band], series,
-                                    "rate (유지 비율)", "자기 기준 대비"),
+                                    "rate (유지 비율)",
+                                    "자기 기준 대비 (배수)", yfmt=lambda v: f"{v:.2f}×"),
                          f"기준 조건의 절대 성적이 달라(TB {tb_ax} "
                          f"{pc(mb['pass1'], 1)} · DeepSWE {se_ax} "
                          f"{pc(mean([r.get('f2p') for r in sw['rows'] if r['arm'] == sb['name']]), 1)}) "
@@ -2444,12 +2460,13 @@ def _rate_fig(doc: Doc, d: dict, b: dict, caption: str):
         doc.next_fig(), f"{caption} (기준 조건 = 1.0)",
         line_chart([a["rate"] for a in band],
                    [(f"{axis} (기준 대비)", ys), ("입력 토큰 (기준 대비)", ts)],
-                   "rate (유지 비율)", "기준 조건 대비"),
-        f"rate=1.0 은 압축 미적용이며 두 선 모두 1.0 에서 출발합니다"
-        f"(기준 {axis} {pc(bv, 1)} · 입력 토큰 {num(b['in_tok'])}). "
-        f"토큰은 낮을수록 좋고 {axis} 는 낮을수록 나쁩니다. "
-        f"**두 선이 함께 내려가면 절감의 대가로 품질을 내주고 있다는 "
-        f"뜻입니다.**")
+                   "rate (유지 비율)", "기준 조건 대비 (배수)", yfmt=lambda v: f"{v:.2f}×"),
+        f"세로축은 **기준 조건을 1.00× 로 둔 배수**입니다. 위 표의 "
+        f"`{axis}` 와 `입력 토큰` 을 각각 기준 조건 값({axis} {pc(bv, 1)} · "
+        f"입력 토큰 {num(b['in_tok'])})으로 나눈 값이며, 0.50× 는 기준의 "
+        f"절반이라는 뜻입니다({axis} 가 50% 라는 뜻이 아닙니다). 토큰은 "
+        f"낮을수록 좋고 {axis} 는 낮을수록 나쁘므로, **두 선이 함께 "
+        f"내려가면 절감의 대가로 품질을 내주고 있다는 뜻입니다.**")
 
 
 def _brief_compare(doc: Doc, D: dict) -> list:
