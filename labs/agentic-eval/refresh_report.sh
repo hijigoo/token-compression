@@ -20,7 +20,7 @@ alldirs() { ls -dt "$1"/*/ 2>/dev/null; }
 # 섞지 않는다 — 섞으면 조건 구성이 어긋나 표본 수가 조건마다 달라진다.
 MAIN=$(alldirs "$RUNS/terminal-bench/terminal-bench-sweep")
 JOBS=""
-for d in /tmp/tbsweep /tmp/tbsweep-extra /tmp/tbsweep-ko; do [ -d "$d" ] && JOBS="$JOBS $d"; done
+for d in /tmp/tbsweep /tmp/tbsweep-extra /tmp/tbsweep-ko /tmp/tb-r095; do [ -d "$d" ] && JOBS="$JOBS $d"; done
 if [ -z "$MAIN" ] || [ -z "$JOBS" ]; then
   MAIN=$(alldirs "$RUNS/terminal-bench/terminal-bench-wide")
   JOBS=""
@@ -39,7 +39,7 @@ for d in /tmp/tbctl /tmp/tbctl-extra /tmp/tbctl-ko; do [ -d "$d" ] && CJOBS="$CJ
 # DeepSWE: 스윕이 있으면 스윕을, 없으면 smoke 라도 넣는다.
 SWE=$(alldirs "$RUNS/deep-swe/deep-swe-sweep")
 SJOBS=""
-for d in /tmp/dssweep /tmp/dssweep-ko; do [ -d "$d" ] && SJOBS="$SJOBS $d"; done
+for d in /tmp/dssweep /tmp/dssweep-ko /tmp/ds-r095; do [ -d "$d" ] && SJOBS="$SJOBS $d"; done
 if [ -n "$SWE" ] && [ -n "$SJOBS" ]; then
   ARGS+=(--swe-run $SWE --swe-jobs $SJOBS)
 elif [ -d /tmp/dssmoke ] && [ -n "$(alldirs "$RUNS/deep-swe/smoke")" ]; then

@@ -1,0 +1,33 @@
+# ⚠️ 이 파일은 **r0.95 조건만** 돌리기 위한 것입니다.
+# 정본은 experiments/deep-swe-sweep.yaml 이며 조건 6개를 모두 담습니다.
+# 나머지 압축 조건은 이미 측정을 마쳤으므로 재실행하지 않습니다.
+# 보고서는 run 디렉터리들을 조건 이름으로 합칩니다.
+#
+# baseline 은 함께 돌립니다. launch.py 가 arm 2개 이상을 요구하기도 하고,
+# 같은 회차를 공유해야 회차 간 편차에 휘둘리지 않기 때문입니다.
+
+name: deep-swe-sweep
+benchmark: deep-swe
+langs: [en, ko]
+model: openai/gpt-5.4      # 최종 호출 모델. 압축기(xlm-roberta)와 별개입니다.
+agent: mini-swe-agent
+
+dataset:
+  tasks:
+    - mashumaro-flattened-dataclass-fields  # python · smoke 에서 검증됨
+    - happy-dom-abort-pending-body-reads    # typescript
+    - geo-shapeindex-serialization          # go
+
+n_attempts: 1
+n_concurrent_trials: 4
+arms:
+  # 기준선을 같이 돌립니다. r0.95 와 **같은 회차**를 공유해야 회차 간
+  # 편차(±18.2%p)에 휘둘리지 않고 비교할 수 있습니다. 기존 기준선 표본과
+  # 합쳐지므로 추정도 좋아집니다.
+  - name: baseline
+    kind: direct
+
+  - name: llmlingua2-r0.95
+    kind: local
+    compressor: llmlingua
+    ratio: 0.95

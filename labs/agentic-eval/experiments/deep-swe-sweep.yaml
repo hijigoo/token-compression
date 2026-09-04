@@ -40,6 +40,11 @@ arms:
     kind: direct
 
   # rate 는 **남길 비율**입니다. 아래로 갈수록 압축이 강해집니다.
+  - name: llmlingua2-r0.95
+    kind: local
+    compressor: llmlingua
+    ratio: 0.95
+
   - name: llmlingua2-r0.9
     kind: local
     compressor: llmlingua

@@ -503,11 +503,15 @@ def mean(xs):
 def read_rollout(run_dirs, jobs: list[Path]) -> dict | None:
     """롤아웃을 조건별로 접습니다.
 
-    `run_dirs` 는 하나 또는 여럿입니다. 언어를 나눠 돌리면(en 을 먼저 돌리고
-    ko 를 나중에 돌리는 식) run 디렉터리가 갈리는데, 조건 이름은 같으므로
-    한 측정으로 합쳐야 합니다. 각 run 의 `arms.json` 에서 URL→조건 이름
-    대응을 모아 하나의 지도로 만듭니다. 프록시 포트는 실행마다 달라지지만
-    조건 이름은 고정이므로 이 방식이 안전합니다.
+    `run_dirs` 는 하나 또는 여럿입니다. 언어를 나눠 돌리거나 조건을 나중에
+    추가하면 run 디렉터리가 갈리는데, 조건 이름은 같으므로 한 측정으로
+    합쳐야 합니다.
+
+    조건 판별은 **run 마다 따로** 합니다. URL→조건 지도를 하나로 합치면
+    안 됩니다 — 프록시 포트는 실행 시점에 비어 있는 것을 잡으므로 같은
+    포트가 롤아웃마다 다른 조건에 붙습니다. 실제로 8802 가 한 번은
+    `r0.95`, 다른 번은 `r0.8` 이었고, 지도를 합치자 한쪽이 덮여 12건이
+    통째로 잘못 귀속됐습니다.
     """
     if isinstance(run_dirs, (str, Path)):
         run_dirs = [run_dirs]
@@ -515,10 +519,12 @@ def read_rollout(run_dirs, jobs: list[Path]) -> dict | None:
     if not run_dirs:
         return None
 
-    by_url: dict[str, str] = {}
     arms: list[dict] = []
     seen: set[str] = set()
+    rows: list[dict] = []
+    claimed: set[str] = set()   # 이미 어느 run 이 가져간 trial
     for rd in run_dirs:
+        by_url: dict[str, str] = {}
         for a in json.loads((rd / "arms.json").read_text(encoding="utf-8")):
             a["compressor"] = a.get("compressor") or "none"
             a["rate"] = a["ratio"] if a.get("ratio") is not None else 1.0
@@ -527,12 +533,27 @@ def read_rollout(run_dirs, jobs: list[Path]) -> dict | None:
             if a["name"] not in seen:
                 seen.add(a["name"])
                 arms.append(a)
+        # trial 이 **이 run 의 시각 이후**에 만들어졌는지 봅니다.
+        #
+        # job_name 은 롤아웃마다 같아서(deep-swe-sweep-en 등) 경로로는
+        # 구분되지 않습니다. run 디렉터리 이름이 타임스탬프이므로, 그보다
+        # 먼저 끝난 trial 은 이 run 의 것이 아닙니다. run_dirs 를 최신순으로
+        # 도니 각 trial 은 자기를 만든 run 에 먼저 잡힙니다.
+        try:
+            t0 = datetime.strptime(rd.name, "%Y%m%d-%H%M%S")
+        except ValueError:
+            t0 = None
+        for r in _rr.collect(jobs, by_url):
+            if not r.get("arm") or r["trial"] in claimed:
+                continue
+            if t0 is not None:
+                res = Path(r["trial"]) / "result.json"
+                if res.exists() and datetime.fromtimestamp(
+                        res.stat().st_mtime) < t0:
+                    continue
+            claimed.add(r["trial"])
+            rows.append(r)
 
-    rows = _rr.collect(jobs, by_url)
-    # 여러 jobs 디렉터리를 한꺼번에 넘기면 다른 실험의 trial 이 섞여 들어올
-    # 수 있습니다. 그런 행은 arm 을 판별하지 못해 None 이 되므로 버립니다.
-    # (남겨 두면 정렬·집계가 조용히 깨집니다.)
-    rows = [r for r in rows if r.get("arm")]
     if not rows:
         return None
 
