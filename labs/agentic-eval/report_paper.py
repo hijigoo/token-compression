@@ -714,6 +714,12 @@ def build(D: dict) -> Doc:
 def _incomplete(doc: Doc, D: dict) -> None:
     """조건별 trial 수가 어긋나면 측정이 아직 진행 중이라는 뜻입니다.
 
+    **전체판에서만 씁니다.** 요약판은 결론을 빨리 전달하는 문서라 맨 위에
+    경고가 붙으면 읽는 흐름이 끊깁니다. 대신 전체판을 보면 어느 세트가
+    덜 찼는지 알 수 있고, 측정 구성 표의 `trial` 열에도 계획 대비 진행이
+    표시됩니다.
+
+
     롤아웃이 끝나기 전에 보고서를 만들면 조건마다 표본 수가 달라, 표에
     찍힌 pass@1 이 실제 성능이 아니라 "지금까지 끝난 것들의 평균" 이
     됩니다. 그 상태를 숨기면 읽는 사람이 확정 수치로 오해합니다.
@@ -2301,7 +2307,6 @@ def build_brief(D: dict) -> Doc:
     doc = Doc("LLM 프롬프트 압축 성능 영향 평가 — 요약",
               f"{' · '.join(marks)} · LLMLingua-2 · 최종 추론 gpt-5.4 · "
               f"{datetime.now():%Y-%m-%d}")
-    _incomplete(doc, D)
     _brief_verdict(doc, D)
 
     doc.sec("무엇을 쟀나", _brief_what(doc, D))

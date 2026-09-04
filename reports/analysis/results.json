@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-09-04T14:59:11",
+ "generated_at": "2026-09-04T15:01:41",
  "sources": {
   "run": "[PosixPath('../../runs/agentic-eval/terminal-bench/terminal-bench-sweep/20260904-084829'), PosixPath('../../runs/agentic-eval/terminal-bench/terminal-bench-sweep/20260904-070708'), PosixPath('../../runs/agentic-eval/terminal-bench/terminal-bench-sweep/20260904-002738')]",
   "jobs": "[PosixPath('/tmp/tbsweep'), PosixPath('/tmp/tbsweep-extra'), PosixPath('/tmp/tbsweep-ko')]",
@@ -3482,8 +3482,8 @@
      "out_tok": 13602.25,
      "steps": 20.5,
      "secs": 3043.1,
-     "n_compress": 98,
-     "self_red": 0.15330831044228077
+     "n_compress": 99,
+     "self_red": 0.1522982542864919
     },
     {
      "name": "llmlingua2-r0.8",
@@ -3497,8 +3497,8 @@
      "out_tok": 12780,
      "steps": 24,
      "secs": 3880.4333333333334,
-     "n_compress": 113,
-     "self_red": 0.20407792672575664
+     "n_compress": 116,
+     "self_red": 0.20282340723613212
     },
     {
      "name": "llmlingua2-r0.7",
@@ -3512,8 +3512,8 @@
      "out_tok": 13401.5,
      "steps": 25.5,
      "secs": 6392.05,
-     "n_compress": 132,
-     "self_red": 0.27786595236890843
+     "n_compress": 134,
+     "self_red": 0.2778037641113583
     },
     {
      "name": "llmlingua2-r0.5",
