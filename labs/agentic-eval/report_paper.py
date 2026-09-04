@@ -104,7 +104,7 @@ class Figure:
 # 색으로 구분하지 않고 **명도와 채움 패턴**으로 구분합니다. 흑백 출력에서도
 # 읽히고, 색각 이상이 있어도 읽힙니다.
 # ═════════════════════════════════════════════════════════════════════
-GRAY = ["#111", "#666", "#aaa", "#d0d0d0"]
+GRAY = ["var(--s1)", "var(--s2)", "var(--s3)", "var(--s4)"]
 
 
 def _esc(s) -> str:
@@ -268,7 +268,7 @@ def scatter(pts: list, xlabel: str, ylabel: str,
              f'text-anchor="middle">{_esc(ylabel)}</text>')
     for lab, x, y in pts:
         cx, cy = X(x), Y(y)
-        o.append(f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="3.4" fill="#111"/>')
+        o.append(f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="3.4" fill="var(--s1)"/>')
         o.append(f'<text x="{cx + 6:.1f}" y="{cy - 5:.1f}" class="tick">'
                  f'{_esc(lab)}</text>')
     o.append("</svg>")
@@ -306,7 +306,7 @@ def slope(pairs: list, labels: list, fmt=lambda v: f"{v:+.0%}",
         x0, x1 = (zero, x) if v >= 0 else (x, zero)
         o.append(f'<rect x="{x0:.1f}" y="{y - 6:.1f}" '
                  f'width="{max(1, x1 - x0):.1f}" height="12" '
-                 f'fill="{"#111" if v > 0 else "#999"}"/>')
+                 f'fill="{"var(--s1)" if v > 0 else "var(--s3)"}"/>')
         ta, tx = ("start", x + 5) if v >= 0 else ("end", x - 5)
         o.append(f'<text x="{tx:.1f}" y="{y + 4:.1f}" class="val" '
                  f'text-anchor="{ta}">{_esc(fmt(v))}{"" if ok is None else ("  ✓" if ok else "  ✗")}</text>')
@@ -318,9 +318,11 @@ def slope(pairs: list, labels: list, fmt=lambda v: f"{v:+.0%}",
 # 렌더링
 # ═════════════════════════════════════════════════════════════════════
 CSS = """
-:root{--fg:#17181a;--dim:#6e6e6e;--line:#e6e6e6;--bg:#fff;--soft:#fafafa}
+:root{--fg:#17181a;--dim:#6e6e6e;--line:#e6e6e6;--bg:#fff;--soft:#fafafa;
+--s1:#17181a;--s2:#6e6e6e;--s3:#a8a8a8;--s4:#cccccc}
 @media(prefers-color-scheme:dark){:root{--fg:#e9e9e9;--dim:#9c9c9c;
---line:#2f2f2f;--bg:#121212;--soft:#1a1a1a}}
+--line:#2f2f2f;--bg:#121212;--soft:#1a1a1a;
+--s1:#e9e9e9;--s2:#9c9c9c;--s3:#6e6e6e;--s4:#4a4a4a}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);
 font:15px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans-serif;
@@ -1452,14 +1454,8 @@ def _analysis(doc: Doc, D: dict) -> list:
                             for a in band])],
                          "rate (유지 비율)", "기준 조건 대비 (배수)",
                          yfmt=lambda v: f"{v:.2f}×"),
-                     f"세로축은 **기준 조건을 1.00× 로 둔 배수**입니다. "
-                     f"바로 위 종합 표의 `pass@1` 과 `입력 토큰` 열을 각각 "
-                     f"기준 조건 값(pass@1 {pc(b['pass1'], 1)} · 입력 토큰 "
-                     f"{num(b['in_tok'])})으로 나눈 것입니다. 예를 들어 "
-                     f"0.50× 는 기준의 절반이라는 뜻이며, pass@1 이 50% 라는 "
-                     f"뜻이 **아닙니다**. 토큰은 낮을수록 좋고 pass@1 은 "
-                     f"낮을수록 나쁘므로, **두 선이 함께 내려가면 절감의 "
-                     f"대가로 정확도를 내주고 있다는 뜻입니다.**")]
+                     _axis_note(band, b, "pass@1", lambda a: a["pass1"],
+                                "종합 표"))]
         B += [Figure(doc.next_fig(),
                      "압축률과 정확도의 상충 관계",
                      scatter([(a["name"].replace("llmlingua2-", ""),
@@ -2431,6 +2427,33 @@ def _brief_bench(doc: Doc, d: dict, D: dict, tag: str) -> list:
     return B
 
 
+def _axis_note(band: list, base: dict, axis: str, val, table_ref: str) -> str:
+    """세로축이 표의 어느 열에서 나온 값인지 **계산해서** 보여 줍니다.
+
+    "표의 값을 기준으로 나눈 값" 이라고 말로만 적으면 어느 열인지 여전히
+    헷갈립니다. 실제 한 줄을 숫자로 대 보면 독자가 표를 보며 바로 검산할
+    수 있습니다.
+    """
+    bv, bt = val(base), base.get("in_tok")
+    # 기준이 아닌 조건 중 첫 줄을 예시로 씁니다.
+    ex = next((a for a in band if a is not base
+               and val(a) is not None and a.get("in_tok")), None)
+    lead = (f"세로축은 **{table_ref}의 값 ÷ 기준 조건 값**입니다. "
+            f"`{axis}` 와 `입력 토큰` 두 열만 그렸습니다.")
+    calc = ""
+    if ex and bv and bt:
+        calc = (f" 예를 들어 `{ex['name']}` 줄은 "
+                f"{axis} {pc(val(ex), 1)} ÷ {pc(bv, 1)} = "
+                f"**{val(ex) / bv:.2f}×**, "
+                f"입력 토큰 {num(ex['in_tok'])} ÷ {num(bt)} = "
+                f"**{ex['in_tok'] / bt:.2f}×** 로 찍힙니다.")
+    return (lead + calc +
+            f" 기준 조건은 두 선 모두 1.00× 입니다. 0.50× 는 기준의 절반이라는 "
+            f"뜻이며, `{axis}` 값이 50% 라는 뜻이 **아닙니다**. 토큰은 "
+            f"낮을수록 좋고 `{axis}` 는 낮을수록 나쁘므로, **두 선이 함께 "
+            f"내려가면 절감의 대가로 품질을 내주고 있다는 뜻입니다.**")
+
+
 def _rate_fig(doc: Doc, d: dict, b: dict, caption: str):
     """압축률 곡선. **두 값을 기준 조건 = 1.0 으로 정규화**해 그립니다.
 
@@ -2461,12 +2484,7 @@ def _rate_fig(doc: Doc, d: dict, b: dict, caption: str):
         line_chart([a["rate"] for a in band],
                    [(f"{axis} (기준 대비)", ys), ("입력 토큰 (기준 대비)", ts)],
                    "rate (유지 비율)", "기준 조건 대비 (배수)", yfmt=lambda v: f"{v:.2f}×"),
-        f"세로축은 **기준 조건을 1.00× 로 둔 배수**입니다. 위 표의 "
-        f"`{axis}` 와 `입력 토큰` 을 각각 기준 조건 값({axis} {pc(bv, 1)} · "
-        f"입력 토큰 {num(b['in_tok'])})으로 나눈 값이며, 0.50× 는 기준의 "
-        f"절반이라는 뜻입니다({axis} 가 50% 라는 뜻이 아닙니다). 토큰은 "
-        f"낮을수록 좋고 {axis} 는 낮을수록 나쁘므로, **두 선이 함께 "
-        f"내려가면 절감의 대가로 품질을 내주고 있다는 뜻입니다.**")
+        _axis_note(band, b, axis, val, "위 표"))
 
 
 def _brief_compare(doc: Doc, D: dict) -> list:
