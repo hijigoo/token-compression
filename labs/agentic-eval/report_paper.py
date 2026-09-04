@@ -951,9 +951,16 @@ def _design(doc: Doc, D: dict) -> list:
              "**openai/gpt-5.4** — Azure AI Foundry 엔드포인트. "
              "전 조건·전 벤치마크 동일하며, 압축 적용 조건도 압축된 "
              "프롬프트를 동일 모델로 호출합니다."],
-            ["압축 모델", "LLMLingua-2 · xlm-roberta-large. 토큰 선별 전용 "
-             "분류 모델이며 텍스트를 생성하지 않습니다. 위 최종 호출 "
-             "모델과는 별개입니다."],
+            ["**압축 모델**",
+             "**`microsoft/llmlingua-2-xlm-roberta-large-meetingbank`** "
+             "(HuggingFace). LLMLingua-2 가 쓰는 토큰 분류 모델로, 각 토큰을 "
+             "남길지 버릴지만 판정하며 **텍스트를 생성하지 않습니다.** 위 "
+             "최종 호출 모델(gpt-5.4)과는 완전히 별개이며, 압축 단계는 "
+             "로컬에서 실행되어 외부 API 를 호출하지 않습니다."],
+            ["압축 실행 장치",
+             "CPU. CUDA 가 있으면 자동으로 GPU 를 쓰지만 본 측정 환경"
+             "(Apple Silicon)에서는 `mps` 미지원 연산을 피하려고 CPU 로 "
+             "떨어집니다. 보고서의 압축 지연은 이 조건의 값입니다."],
             ["압축 적용 지점", "역방향 프록시 (Chat Completions / Responses API)"],
             ["스텝 상한", "60회. 압축으로 에이전트가 헤맬 때 무한정 늘어나는 "
              "것을 막습니다. **전 조건 동일**하게 적용하였습니다."],
@@ -961,11 +968,12 @@ def _design(doc: Doc, D: dict) -> list:
              "반복 시도하지 않으며, 반복에 따른 변동은 별도의 압축 없이 반복 측정으로 "
              "추정하였습니다."]]
     B += [Table(doc.next_table(), "공통 실험 환경", ["항목", "내용"], rows)]
-    B += [Note("모델 구성이 두 단계입니다. **압축 단계**에서는 LLMLingua-2 가 "
-               "어떤 토큰을 남길지 분류하고, **추론 단계**에서는 그 결과를 "
-               "gpt-5.4 가 입력으로 받습니다. 보고서의 pass@1·토큰 지표는 "
-               "모두 gpt-5.4 호출 기준이며, 실제 호출 모델명은 프록시 "
-               "로그에서 확인하였습니다.")]
+    B += [Note("모델이 두 개 쓰입니다. **압축 단계**에서 "
+               "`llmlingua-2-xlm-roberta-large-meetingbank` 가 어떤 토큰을 "
+               "남길지 분류하고, **추론 단계**에서 그 결과를 `gpt-5.4` 가 "
+               "입력으로 받습니다. 보고서의 pass@1·토큰 지표는 모두 gpt-5.4 "
+               "호출 기준이며, 실제 호출 모델명은 프록시 로그에서 "
+               "확인하였습니다(전 조건 `gpt-5.4`).")]
 
     # ── 벤치마크별 ──────────────────────────────────────────
     B += ["벤치마크별 설계",
@@ -1840,7 +1848,8 @@ def main() -> int:
     ap.add_argument("--control-run", type=Path, nargs="*", default=[],
                     help="압축 없이 반복 측정 run 디렉터리")
     ap.add_argument("--control-jobs", type=Path, nargs="*", default=[])
-    ap.add_argument("--swe-run", type=Path, help="DeepSWE run 디렉터리")
+    ap.add_argument("--swe-run", type=Path, nargs="*", default=[],
+                    help="DeepSWE run 디렉터리 (언어별로 갈리면 여러 개)")
     ap.add_argument("--swe-jobs", type=Path, nargs="*", default=[])
     ap.add_argument("--samples", type=Path)
     ap.add_argument("-o", "--out", type=Path, required=True)
@@ -1860,11 +1869,11 @@ def main() -> int:
         if D["control"]:
             print(f"  압축 없이 반복 측정 {len(D['control']['rows'])} trial")
     if a.swe_run and a.swe_jobs:
-        D["swe"] = read_rollout(a.swe_run, list(a.swe_jobs))
+        D["swe"] = read_rollout(list(a.swe_run), list(a.swe_jobs))
         if D["swe"]:
             print(f"  DeepSWE  {len(D['swe']['rows'])} trial")
             D["swe_proxy"] = read_proxy(
-                a.swe_run, [x["name"] for x in D["swe"]["by_arm"]])
+                list(a.swe_run), [x["name"] for x in D["swe"]["by_arm"]])
     if a.samples and a.samples.exists():
         D["samples"] = json.loads(a.samples.read_text(encoding="utf-8"))
         print(f"  압축 예시 {len(D['samples']['cases'])}건")
@@ -2021,6 +2030,52 @@ def _swe(doc: Doc, D: dict) -> list:
                     ["조건", "호출 수", "평균", "중앙값", "90분위",
                      "지연 중앙값(ms)", "지연 90분위(ms)"], rows,
                     align="lrrrrrr")]
+
+    # ── 언어별 ──────────────────────────────────────────────
+    # Terminal Bench 와 같은 이유로 나눕니다. 합쳐 놓으면 "한국어에서도
+    # 같은가" 를 알 수 없고, 한국어는 토큰을 더 쓰므로 절대값을 언어
+    # 가로질러 비교하면 안 됩니다.
+    langs = sorted({r["lang"] for r in sw["rows"]})
+    if len(langs) > 1:
+        f2p_lang = lambda arm, lg: mean(          # noqa: E731
+            [r.get("f2p") for r in sw["rows"]
+             if r["arm"] == arm and r["lang"] == lg])
+        rows = []
+        for a2 in sw["by_arm"]:
+            for lg in langs:
+                band = [r for r in sw["rows"]
+                        if r["arm"] == a2["name"] and r["lang"] == lg]
+                if not band:
+                    continue
+                rw = [r["reward"] for r in band if r["reward"] is not None]
+                k, n = sum(1 for x in rw if x > 0), len(rw)
+                bf = f2p_lang(b["name"], lg)
+                cf = f2p_lang(a2["name"], lg)
+                bt = mean([r["in_tok"] for r in sw["rows"]
+                           if r["arm"] == b["name"] and r["lang"] == lg])
+                tk = mean([r["in_tok"] for r in band])
+                is_b = a2 is b
+                rows.append([
+                    f"`{a2['name']}`", lg, f"{k}/{n}",
+                    pc(cf, 1) if cf is not None else "—",
+                    "기준" if is_b else (pp(cf - bf, 1)
+                                        if (cf is not None and bf is not None)
+                                        else "—"),
+                    str(sum(1 for r in band if r.get("error"))),
+                    num(tk),
+                    "기준" if is_b else (rel(tk / bt - 1)
+                                        if (tk and bt) else "—"),
+                ])
+        B += ["언어별 결과",
+              P("동일한 태스크의 지시문만 번역하여 언어별로 측정하였습니다. "
+                "**각 값은 같은 언어의 기준 조건과 비교한 것입니다.**"),
+              Table(doc.next_table(), "DeepSWE 언어별 조건 성능",
+                    ["조건", "언어", "통과 / 시도", "f2p", "f2p 기준차",
+                     "한도 초과", "입력 토큰", "토큰 기준차"],
+                    rows, align="llrrrrrr"),
+              Note("pass@1 은 전 조건 0 이므로 부분 진척도인 f2p 로 "
+                   "비교합니다. 한국어는 같은 내용에 토큰을 더 쓰므로 "
+                   "입력 토큰의 절대값을 언어 간에 비교하지 마십시오.")]
     return B
 
 
@@ -2351,11 +2406,21 @@ def _brief_verdict(doc: Doc, D: dict) -> None:
 def _brief_what(doc: Doc, D: dict) -> list:
     B = [P("공식 하네스(`pier` · Docker 격리)로 에이전트를 실제 실행하고 "
            "저장소 테스트로 채점했습니다. 압축은 에이전트와 모델 사이 "
-           "프록시에서 적용되며, **최종 추론은 전 조건 동일하게 "
-           "gpt-5.4**(Azure)를 호출합니다."),
-         Code("[에이전트] → [압축 프록시: 프롬프트 일부 삭제] → [gpt-5.4]\n"
-              "                                                    ↓\n"
-              "                                        [테스트로 채점]")]
+           "프록시에서 적용됩니다."),
+         Code("[에이전트]\n"
+              "     ↓\n"
+              "[압축 프록시]  llmlingua-2-xlm-roberta-large-meetingbank\n"
+              "               → 남길 토큰만 분류 (로컬 CPU · 생성 아님)\n"
+              "     ↓\n"
+              "[추론]         gpt-5.4 (Azure AI Foundry)\n"
+              "     ↓\n"
+              "[테스트로 채점]"),
+         Note("**모델이 두 개 쓰입니다.** 압축은 "
+              "`microsoft/llmlingua-2-xlm-roberta-large-meetingbank` 가 "
+              "각 토큰을 남길지만 판정하는 방식이라 텍스트를 새로 만들지 "
+              "않고, 외부 API 도 부르지 않습니다. **최종 추론은 전 조건 "
+              "동일하게 gpt-5.4** 를 호출하며, 보고서의 pass@1·토큰 지표는 "
+              "모두 이 호출 기준입니다.")]
     rows = []
     for key, lbl, bm, purpose in (
             ("main", "압축 조건 비교", "Terminal Bench 2.1", "정확도·토큰 비교"),

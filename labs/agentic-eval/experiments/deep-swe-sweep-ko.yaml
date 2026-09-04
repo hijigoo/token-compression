@@ -1,3 +1,8 @@
+# ⚠️ 이 파일은 **ko 만** 돌리기 위한 것입니다.
+# 정본은 experiments/deep-swe-sweep.yaml 이며 langs 가 [en, ko] 입니다.
+# en 은 이미 측정을 마쳤으므로 재실행하지 않고 재활용합니다.
+# 보고서는 두 run 디렉터리를 조건 이름으로 합칩니다.
+
 # 목적: **압축률–정확도 곡선**을 DeepSWE 에서도 얻는다.
 #
 # Terminal Bench 와 DeepSWE 는 부하 성격이 완전히 다릅니다. smoke 측정에서
@@ -22,7 +27,7 @@
 
 name: deep-swe-sweep
 benchmark: deep-swe
-langs: [en, ko]
+langs: [ko]
 model: openai/gpt-5.4      # 최종 호출 모델. 압축기(xlm-roberta)와 별개입니다.
 agent: mini-swe-agent
 

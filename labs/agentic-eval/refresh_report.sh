@@ -38,8 +38,10 @@ for d in /tmp/tbctl /tmp/tbctl-extra /tmp/tbctl-ko; do [ -d "$d" ] && CJOBS="$CJ
 
 # DeepSWE: 스윕이 있으면 스윕을, 없으면 smoke 라도 넣는다.
 SWE=$(alldirs "$RUNS/deep-swe/deep-swe-sweep")
-if [ -n "$SWE" ] && [ -d /tmp/dssweep ]; then
-  ARGS+=(--swe-run $SWE --swe-jobs /tmp/dssweep)
+SJOBS=""
+for d in /tmp/dssweep /tmp/dssweep-ko; do [ -d "$d" ] && SJOBS="$SJOBS $d"; done
+if [ -n "$SWE" ] && [ -n "$SJOBS" ]; then
+  ARGS+=(--swe-run $SWE --swe-jobs $SJOBS)
 elif [ -d /tmp/dssmoke ] && [ -n "$(alldirs "$RUNS/deep-swe/smoke")" ]; then
   ARGS+=(--swe-run $(alldirs "$RUNS/deep-swe/smoke") --swe-jobs /tmp/dssmoke)
 fi
