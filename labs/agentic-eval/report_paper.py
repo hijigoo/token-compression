@@ -1275,33 +1275,107 @@ def _results(doc: Doc, D: dict) -> list:
                        "일치하지 않습니다.")]
 
     # ── 언어별 ──────────────────────────────────────────────
-    # MS 문서 세트를 따로 두던 것을 없애고, 압축 조건 비교이 en·ko 를 모두
-    # 포함하도록 바꿨습니다. 별도 세트를 쓰면 태스크가 달라 언어 효과와
-    # 태스크 효과가 섞였습니다.
+    # 종합 표는 en·ko 를 합친 값이라 "한국어에서도 같은 경향인가" 를
+    # 알 수 없습니다. 조건 하나를 언어별로 한 줄씩 펴서, 각 언어의 기준
+    # 조건과 견주게 합니다. **언어를 가로질러 비교하면 안 됩니다** —
+    # 한국어는 같은 내용에 토큰을 더 쓰므로 절대값이 원래 다릅니다.
     langs = sorted({r["lang"] for r in m["rows"]})
     if len(langs) > 1:
+        base_of_lang = {}
+        for lg in langs:
+            band = [r for r in m["rows"]
+                    if r["arm"] == b["name"] and r["lang"] == lg]
+            rw = [r["reward"] for r in band if r["reward"] is not None]
+            base_of_lang[lg] = {
+                "pass1": (sum(1 for x in rw if x > 0) / len(rw)) if rw else None,
+                "in_tok": mean([r["in_tok"] for r in band]),
+            }
+
         rows = []
         for a in m["by_arm"]:
-            line = [f"`{a['name']}`"]
             for lg in langs:
                 band = [r for r in m["rows"]
                         if r["arm"] == a["name"] and r["lang"] == lg]
+                if not band:
+                    continue
                 rw = [r["reward"] for r in band if r["reward"] is not None]
-                line += [f"{sum(1 for x in rw if x > 0)}/{len(rw)}" if rw else "—",
-                         num(mean([r["in_tok"] for r in band]))]
-            rows.append(line)
-        head = ["조건"]
-        for lg in langs:
-            head += [f"{lg} 통과", f"{lg} 입력 토큰"]
+                k, n = sum(1 for x in rw if x > 0), len(rw)
+                p1 = (k / n) if n else None
+                tk = mean([r["in_tok"] for r in band])
+                bl = base_of_lang[lg]
+                is_b = a is b
+                rows.append([
+                    f"`{a['name']}`", lg, f"{k}/{n}", pc(p1, 1),
+                    "기준" if is_b else (pp(p1 - bl["pass1"], 1)
+                                        if (p1 is not None and bl["pass1"] is not None)
+                                        else "—"),
+                    num(tk),
+                    "기준" if is_b else (rel(tk / bl["in_tok"] - 1)
+                                        if (tk and bl["in_tok"]) else "—"),
+                    f"{mean([r['steps'] for r in band]):.1f}"
+                    if any(r.get("steps") for r in band) else "—",
+                ])
         B += ["언어별 결과",
               P("동일한 태스크의 지시문만 번역하여 언어별로 측정하였습니다. "
-                "채점 코드와 환경은 동일하므로, 차이는 지시문 언어에서만 "
-                "발생합니다."),
-              Table(doc.next_table(), "언어별 조건 성능", head, rows,
-                    align="l" + "rr" * len(langs)),
-              Note("번역 시 식별자·경로·명령어는 원문을 유지하도록 검증"
-                   "하였습니다. 언어당 태스크 수가 제한적이므로 언어 간 "
-                   "절대 비교보다 동일 언어 내 조건 간 추세로 해석하십시오.")]
+                "채점 코드와 실행 환경은 같으므로, 차이는 지시문 언어에서만 "
+                "발생합니다. **각 값은 같은 언어의 기준 조건과 비교한 "
+                "것입니다.**"),
+              Table(doc.next_table(), "언어별 조건 성능",
+                    ["조건", "언어", "통과 / 시도", "pass@1", "pass@1 기준차",
+                     "입력 토큰", "토큰 기준차", "스텝"],
+                    rows, align="llrrrrrr")]
+
+        # 언어별 곡선을 나란히 — 경향이 재현되는지가 핵심입니다.
+        band_arms = sorted([a for a in m["by_arm"] if a["rate"] is not None],
+                           key=lambda a: -a["rate"])
+        if len(band_arms) > 1:
+            series = []
+            for lg in langs:
+                ys = []
+                for a in band_arms:
+                    sub = [r for r in m["rows"]
+                           if r["arm"] == a["name"] and r["lang"] == lg]
+                    rw = [r["reward"] for r in sub if r["reward"] is not None]
+                    bp = base_of_lang[lg]["pass1"]
+                    ys.append((sum(1 for x in rw if x > 0) / len(rw) / bp)
+                              if (rw and bp) else None)
+                series.append((f"{lg} pass@1", ys))
+            B += [Figure(doc.next_fig(),
+                         "언어별 압축률–정확도 곡선 (각 언어의 기준 = 1.0)",
+                         line_chart([a["rate"] for a in band_arms], series,
+                                    "rate (유지 비율)", "자기 언어 기준 대비"),
+                         "두 선이 비슷하게 내려가면 언어와 무관하게 같은 "
+                         "경향이라는 뜻입니다.")]
+
+        # 경향이 재현되는지 데이터로 판정합니다.
+        verdicts = []
+        for lg in langs:
+            bp = base_of_lang[lg]["pass1"]
+            worst = None
+            for a in band_arms:
+                sub = [r for r in m["rows"]
+                       if r["arm"] == a["name"] and r["lang"] == lg]
+                rw = [r["reward"] for r in sub if r["reward"] is not None]
+                if not rw or bp is None:
+                    continue
+                v = sum(1 for x in rw if x > 0) / len(rw)
+                if worst is None or v < worst[1]:
+                    worst = (a, v)
+            if worst and bp is not None:
+                verdicts.append(f"{lg} 는 {pc(bp, 1)} 에서 "
+                                f"`rate {worst[0]['rate']}` 의 "
+                                f"{pc(worst[1], 1)} 까지"
+                                f"({pp(worst[1] - bp, 1)})")
+        if verdicts:
+            B += [P("가장 강한 압축에서의 하락 폭은 " +
+                    ", ".join(verdicts) + " 였습니다. "
+                    "**두 언어에서 같은 방향의 하락이 관측되었습니다.**")]
+        B += [Note("번역 시 식별자·경로·명령어는 원문을 유지하도록 "
+                   "검증하였습니다. 한국어는 같은 내용에 토큰을 더 쓰므로 "
+                   "입력 토큰의 절대값을 언어 간에 비교하지 마십시오. "
+                   "언어당 태스크 수가 제한적이라 조건 간 추세로 "
+                   "해석하십시오.")]
+
     return B
 
 
