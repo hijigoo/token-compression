@@ -2046,6 +2046,7 @@ def _swe(doc: Doc, D: dict) -> list:
         f2p_lang = lambda arm, lg: mean(          # noqa: E731
             [r.get("f2p") for r in sw["rows"]
              if r["arm"] == arm and r["lang"] == lg])
+        n_pass_total = sum(a2["n_pass"] for a2 in sw["by_arm"])
         rows = []
         for a2 in sw["by_arm"]:
             for lg in langs:
@@ -2079,9 +2080,14 @@ def _swe(doc: Doc, D: dict) -> list:
                     ["조건", "언어", "통과 / 시도", "f2p", "f2p 기준차",
                      "한도 초과", "입력 토큰", "토큰 기준차"],
                     rows, align="llrrrrrr"),
-              Note("pass@1 은 전 조건 0 이므로 부분 진척도인 f2p 로 "
-                   "비교합니다. 한국어는 같은 내용에 토큰을 더 쓰므로 "
-                   "입력 토큰의 절대값을 언어 간에 비교하지 마십시오.")]
+              Note(("pass@1 이 대부분 0 이라 부분 진척도인 f2p 로 "
+                    "비교합니다. " if n_pass_total <= 1 else
+                    "완전 해결은 드물어 부분 진척도인 f2p 를 함께 "
+                    "봅니다. ") +
+                   "**f2p 는 이슈 해결을 위해 통과시켜야 하는 테스트의 "
+                   "통과 비율**이며, 100% 가 되어야 pass@1 이 1 점입니다. "
+                   "한국어는 같은 내용에 토큰을 더 쓰므로 입력 토큰의 "
+                   "절대값을 언어 간에 비교하지 마십시오.")]
     return B
 
 
@@ -2400,6 +2406,39 @@ def _brief_verdict(doc: Doc, D: dict) -> None:
                 txt += (f" trial 소요 시간은 최대 {mx / swb['secs']:.0f}배로 "
                         f"늘었습니다.")
             doc.abstract.append(txt)
+
+    # 언어별로 경향이 재현되는지 — 한쪽에서만 나타난 현상이면 결론의
+    # 적용 범위가 달라집니다.
+    lang_lines = []
+    for key, lbl, axis in (("main", "Terminal Bench", "pass@1"),
+                           ("swe", "DeepSWE", "f2p")):
+        d = D.get(key)
+        if not d or len({r["lang"] for r in d["rows"]}) < 2:
+            continue
+        db = _base_of(d)
+        use_f2p = axis == "f2p"
+        got = []
+        for lg in sorted({r["lang"] for r in d["rows"]}):
+            def qv(arm):
+                sub = [r for r in d["rows"]
+                       if r["arm"] == arm and r["lang"] == lg]
+                if use_f2p:
+                    return mean([r.get("f2p") for r in sub])
+                rw = [r["reward"] for r in sub if r["reward"] is not None]
+                return (sum(1 for x in rw if x > 0) / len(rw)) if rw else None
+            bv = qv(db["name"])
+            drops = [qv(a2["name"]) - bv for a2 in d["by_arm"]
+                     if a2 is not db and qv(a2["name"]) is not None
+                     and bv is not None]
+            if drops:
+                got.append(f"{lg} {pp(min(drops), 1)}")
+        if got:
+            lang_lines.append(f"{lbl} 는 {' · '.join(got)}")
+    if lang_lines:
+        doc.abstract.append(
+            "**두 언어 모두 같은 방향으로 떨어졌습니다.** 최대 하락 폭은 "
+            + ", ".join(lang_lines) + " 였습니다. 언어를 바꿔도 결론이 "
+            "달라지지 않습니다.")
 
     doc.abstract.append(
         "**종합하면, 큰 폭의 토큰 절감은 정확도 저하를 동반했고, 정확도를 "
