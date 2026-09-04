@@ -360,7 +360,7 @@ def wait_healthy(port: int, proc: subprocess.Popen, name: str, timeout: float = 
 # 관측치: Terminal Bench 기준 조건이 60~80초, DeepSWE 기준 조건이 460초.
 # 압축 조건은 3,900~9,300초까지 늘어났다. 1,800초는 정상 경로는 살리고
 # 멈춘 경로만 끊는 선이다. DeepSWE 압축 조건 일부가 여기 걸리지만, 그건
-# "예산 안에 못 끝냈다" 는 결과이지 측정 실패가 아니다.
+# "허용된 호출 안에 못 끝냈다" 는 결과이지 측정 실패가 아니다.
 AGENT_TIMEOUT_SEC = 1800.0
 
 _STEP_LIMIT_YAML = "agent:\n  step_limit: 60\n"
@@ -388,8 +388,8 @@ def build_pier_config(spec: dict, arms: list[dict], public_host: str,
             #
             # 상한은 **모든 조건에 동일하게** 건다. 압축 조건에만 걸면
             # 비교가 깨진다. 상한에 걸린 trial 은 실패로 집계되는데, 이는
-            # "주어진 예산 안에 못 끝냈다" 는 뜻이라 정확도 지표로서
-            # 타당하다 — 실제 운영에서도 예산은 유한하다.
+            # "허용된 호출 안에 못 끝냈다" 는 뜻이라 정확도 지표로서
+            # 타당하다 — 실제 운영에서도 호출 횟수는 유한하다.
             "kwargs": {"config_yaml": _STEP_LIMIT_YAML},
             # ★ trial 시간 상한.
             #
@@ -400,7 +400,7 @@ def build_pier_config(spec: dict, arms: list[dict], public_host: str,
             #
             # 여기서 거는 상한은 **모든 조건에 동일**하다. 압축 조건에만
             # 걸면 비교가 깨진다. 상한에 걸린 trial 은 실패로 집계되는데,
-            # 이는 "주어진 시간 안에 못 끝냈다" 는 뜻이라 정확도 지표로서
+            # 이는 "허용된 시간 안에 못 끝냈다" 는 뜻이라 정확도 지표로서
             # 타당하다 — 실제 운영에서도 시간은 유한하다.
             "override_timeout_sec": AGENT_TIMEOUT_SEC,
             "max_timeout_sec": AGENT_TIMEOUT_SEC,

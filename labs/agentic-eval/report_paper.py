@@ -558,7 +558,7 @@ def read_rollout(run_dirs, jobs: list[Path]) -> dict | None:
         band = [r for r in rows if r["arm"] == a["name"]]
         if not band:
             continue
-        # 에이전트가 예산(스텝 상한) 안에 끝내지 못하면 pier 가 예외로
+        # 에이전트가 호출 한도(스텝 상한) 안에 끝내지 못하면 pier 가 예외로
         # 기록하고 reward 가 비어 있습니다. 이것을 집계에서 빼면 "끝낸
         # trial 만 모아 정확도를 계산" 하는 셈이라 압축 조건이 실제보다
         # 좋게 보입니다. **끝내지 못한 것도 실패**로 셉니다.
@@ -623,7 +623,7 @@ COMPRESSOR_PARAMS = [
     ("rate", "0 – 1", "유지 비율(retention ratio). 원문 토큰 중 남길 비율을 "
      "지정합니다. `rate=0.5` 는 절반을 남깁니다. 본 실험의 주 조작 변수입니다."),
     ("force_tokens", "토큰 목록", "지정한 토큰(줄바꿈·구두점 등)을 삭제 대상에서 "
-     "제외합니다. 서식은 보존되나 동일 예산 내에서 내용 토큰이 밀려납니다."),
+     "제외합니다. 서식은 보존되나 같은 분량 안에서 내용 토큰이 밀려납니다."),
     ("force_reserve_digit", "True / False", "숫자 토큰을 삭제 대상에서 제외합니다. "
      "오류 코드·행 번호가 유의미한 입력에 적용합니다."),
     ("drop_consecutive", "True / False", "연속 중복 토큰을 1회로 축약합니다."),
@@ -839,7 +839,7 @@ def _abstract(doc: Doc, D: dict) -> None:
                          f"{pc(max(cf), 1)} 이하로 떨어졌습니다")
         n_err = sum(a2.get("n_err") or 0 for a2 in swc)
         if n_err and not (swb.get("n_err") or 0):
-            parts.append(f"압축 조건에서만 스텝 예산을 초과해 과제를 끝내지 "
+            parts.append(f"압축 조건에서만 호출 한도를 초과해 과제를 끝내지 "
                          f"못한 trial 이 {n_err}건 발생했습니다")
         if swb["secs"] and any(a2["secs"] for a2 in swc):
             mx = max(a2["secs"] for a2 in swc if a2["secs"])
@@ -1844,10 +1844,10 @@ def _swe(doc: Doc, D: dict) -> list:
             f"{a['secs']:.0f}" if a["secs"] else "—"])
     B += ["종합 결과",
           Table(doc.next_table(), "DeepSWE 조건별 성능 (trial 평균)",
-                ["조건", "통과 / 시도", "pass@1", "f2p", "p2p", "예산 초과",
+                ["조건", "통과 / 시도", "pass@1", "f2p", "p2p", "한도 초과",
                  "입력 토큰", "토큰 기준차", "스텝", "소요(초)"], rows,
                 align="lrrrrrrrrr"),
-          Note("**예산 초과** 는 에이전트가 스텝 상한(60회) 안에 과제를 "
+          Note("**한도 초과** 는 에이전트가 호출 한도(60회) 안에 과제를 "
                "끝내지 못해 중단된 trial 수입니다. **실패로 집계**합니다 — "
                "제외하면 끝낸 trial 만 모아 정확도를 재는 셈이 되어 압축 "
                "조건이 실제보다 좋게 보입니다. "
@@ -1858,21 +1858,21 @@ def _swe(doc: Doc, D: dict) -> list:
                "비교할 수 있습니다. **토큰 기준차** 는 압축 미적용 조건 "
                "대비 입력 토큰의 증감을 상대 비율(%)로 표기한 것입니다.")]
 
-    # 예산 초과가 압축 조건에만 몰리는지 봅니다. 그렇다면 "정확도가 조금
+    # 한도 초과가 압축 조건에만 몰리는지 봅니다. 그렇다면 "정확도가 조금
     # 떨어졌다" 가 아니라 "아예 끝내지 못했다" 는 뜻이라 성격이 다릅니다.
     errs = [(a["name"], a.get("n_err") or 0, a["n"]) for a in sw["by_arm"]]
     tot_err = sum(e for _, e, _ in errs)
     if tot_err:
         base_err = next((e for n, e, _ in errs if n == b["name"]), 0)
         comp_err = tot_err - base_err
-        B += [P(f"**예산 초과가 {tot_err}건 발생했습니다"
+        B += [P(f"**한도 초과가 {tot_err}건 발생했습니다"
                 + (f" — 전부 압축 조건입니다" if base_err == 0 and comp_err
                    else f" (기준 조건 {base_err}건, 압축 조건 {comp_err}건)")
                 + ".** 스텝 상한은 전 조건 동일하게 60회를 적용했으므로, "
-                "압축 조건이 같은 예산 안에 과제를 끝내지 못했다는 뜻입니다. "
+                "압축 조건이 같은 한도 안에 과제를 끝내지 못했다는 뜻입니다. "
                 "정확도가 조금 낮아진 것과는 성격이 다릅니다 — 압축으로 "
-                "손상된 컨텍스트를 에이전트가 반복 탐색하면서 예산을 "
-                "소진했습니다.")]
+                "손상된 컨텍스트를 에이전트가 반복 탐색하면서 호출 횟수를 "
+                "다 써 버렸습니다.")]
 
     names = [a["name"] for a in sw["by_arm"]]
     f2ps = []
@@ -2208,7 +2208,7 @@ def _brief_verdict(doc: Doc, D: dict) -> None:
                    f"이슈 해결 진척도(f2p)가 {pc(bf, 1)} 에서 "
                    f"{pc(max(cf), 1)} 이하로 떨어졌습니다.")
             if n_err and not (swb.get("n_err") or 0):
-                txt += (f" 스텝 예산을 초과해 과제를 끝내지 못한 trial 이 "
+                txt += (f" 호출 한도를 초과해 과제를 끝내지 못한 trial 이 "
                         f"{n_err}건 발생했고 **전부 압축 조건**이었습니다.")
             if swb["secs"] and any(a["secs"] for a in swc):
                 mx = max(a["secs"] for a in swc if a["secs"])
